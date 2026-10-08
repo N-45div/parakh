@@ -28,6 +28,7 @@ class Vendor(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     city: str = Field(min_length=2, max_length=60)
     gstin: str = Field(default="", max_length=20)
+    phone: str = Field(default="", max_length=20)
 
 
 @app.get("/")

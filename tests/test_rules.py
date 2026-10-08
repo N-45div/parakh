@@ -99,3 +99,37 @@ def test_app_imports_and_serves_examples(tmp_path, monkeypatch):
     assert client.get("/api/examples").json() == []
     assert client.get("/api/checks/nope").status_code == 404
     assert client.get("/").status_code == 200
+
+
+def test_company_status_and_young_registrations():
+    from datetime import date
+    gst = gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd")
+    registry = _judged(id="registry-0", source="registry", kind="registry_record", severity="none", status="active", registered_on="2026-08-01")
+    young = _build_on([registry], gst, date(2026, 10, 9))
+    assert young["verdict"] == "verify" and "under six months ago" in young["flags"][0]["text"]
+    company = _judged(id="company-0", source="company", kind="company_record", severity="none", status="strike_off", registered_on="2015-04-02", cin="U27100KA2015PTC000001")
+    struck = _build_on([_judged(id="registry-0", source="registry", kind="registry_record", severity="none", status="active"), company], gst, date(2026, 10, 9))
+    assert struck["verdict"] == "hold" and struck["identity"]["company"]["cin"] == "U27100KA2015PTC000001"
+    new_company = _judged(id="company-0", source="company", kind="company_record", severity="none", status="active", registered_on="2026-03")
+    assert _build_on([new_company], gst, date(2026, 10, 9))["verdict"] == "verify"
+
+
+def _build_on(judged, gst, today):
+    gathered = {"core_name": "Acme Steel", "listing": {"title": "Acme Steel", "address": "Peenya, Bengaluru, Karnataka", "name_matches": True,
+                                                         "permanently_closed": False, "temporarily_closed": False, "maps_link": None}, "items": judged}
+    return brief.build({"name": "Acme Steel Ltd", "city": "Bengaluru", "gstin": gst["gstin"]}, gst, gathered, judged, "m", [], today=today)
+
+
+def test_phone_numbers_and_company_names():
+    from parakh.evidence import is_company, phone_digits
+    assert phone_digits("+91 98450 12345") == phone_digits("09845012345") == phone_digits("9845012345") == "9845012345"
+    assert phone_digits("12345") == ""
+    assert is_company("Acme Steel Pvt Ltd", None) and is_company("Acme Steel", "company") and not is_company("Ramesh & Co", "individual")
+
+
+def test_an_amalgamated_company_needs_verifying():
+    from datetime import date
+    gst = gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd")
+    merged = _judged(id="company-0", source="company", kind="company_record", severity="none", status="amalgamated", registered_on="2010-01-13")
+    result = _build_on([merged], gst, date(2026, 10, 9))
+    assert result["verdict"] == "verify" and "merged into another company" in result["flags"][0]["text"]

@@ -13,7 +13,7 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
     gst = gstin.inspect(v["gstin"], v["name"])
     searches = Searches(os.environ.get("SERPAPI_API_KEY"), store, offline=os.environ.get("PARAKH_OFFLINE") == "1")
     # The registry search only makes sense for a well-formed GSTIN
-    for event in evidence.gather({**v, "gstin": v["gstin"] if gst.get("valid") else ""}, searches):
+    for event in evidence.gather({**v, "gstin": v["gstin"] if gst.get("valid") else "", "entity": gst.get("entity_type")}, searches):
         if event["step"] == "gathered":
             gathering = event
         else:

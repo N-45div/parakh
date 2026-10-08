@@ -70,6 +70,15 @@ def gather(vendor: dict, searches: Searches):
     }
     if gstin:
         plan["registry"] = ("GST registry listings", "google", {"q": f'"{gstin}"', "num": 10, **region})
+    if is_company(name, vendor.get("entity")):
+        # Company directories (Zauba, Tofler and others) carry MCA status, incorporation date and CIN in their snippets
+        plan["company"] = ("Company registry listings", "google",
+                           {"q": f'"{core}" ({" OR ".join(f"site:{s}" for s in COMPANY_SITES)})', "num": 10, **region})
+    phone = phone_digits(vendor.get("phone"))
+    if phone:
+        spaced = f"{phone[:5]} {phone[5:]}"
+        plan["phone"] = ("Phone number reports", "google",
+                         {"q": f'"{phone}" OR "{spaced}" OR "+91 {spaced}" OR "+91{phone}"', "num": 10, **region})
     results, listing = {}, None
     with ThreadPoolExecutor(max_workers=6) as pool:
         running = {pool.submit(searches.run, purpose, engine, **params): step for step, (purpose, engine, params) in plan.items()}
@@ -98,6 +107,7 @@ def gather(vendor: dict, searches: Searches):
     items += [_item("news", i, n.get("title"), n.get("snippet") or "", n.get("link"), n.get("date"), (n.get("source") or {}).get("name"))
               for i, n in enumerate((results["news"].get("news_results") or [])[:8]) if n.get("link")]
     items += _organic("court", results["court"]) + _organic("complaints", results["complaints"])
+    items += _organic("company", results.get("company", {})) + _organic("phone", results.get("phone", {}))
     # Two searches can find the same page; it is one piece of evidence
     unique = list({i["link"] or i["id"]: i for i in items if i["title"] or i["snippet"]}.values())
     yield {"step": "gathered", "core_name": core, "listing": listing, "items": unique}
@@ -109,4 +119,20 @@ DETAILS = {
     "news": lambda listing: "Searched news for raids, arrests, fake invoices and fraud",
     "court": lambda listing: "Searched court records on Indian Kanoon",
     "complaints": lambda listing: "Searched complaint and scam reports",
+    "company": lambda listing: "Searched company registry listings for MCA status",
+    "phone": lambda listing: "Searched reports about the phone number",
 }
+COMPANY = re.compile(r"\b(pvt|private|ltd|limited|llp)\b", re.I)
+# Public mirrors of the MCA register whose snippets carry the CIN, status and incorporation date
+COMPANY_SITES = ("zaubacorp.com", "tofler.in", "thecompanycheck.com", "instafinancials.com", "falconebiz.com")
+
+
+def is_company(name: str, entity: str | None) -> bool:
+    return bool(COMPANY.search(name)) or entity in ("company", "firm or LLP")
+
+
+def phone_digits(phone: str | None) -> str:
+    """The 10-digit Indian mobile or landline number, without +91 or a leading 0; empty if it isn't one."""
+    digits = re.sub(r"\D", "", phone or "")
+    digits = digits[2:] if len(digits) == 12 and digits.startswith("91") else digits[1:] if len(digits) == 11 and digits.startswith("0") else digits
+    return digits if len(digits) == 10 else ""
