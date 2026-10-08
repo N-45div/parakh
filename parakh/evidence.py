@@ -77,8 +77,11 @@ def gather(vendor: dict, searches: Searches):
     phone = phone_digits(vendor.get("phone"))
     if phone:
         spaced = f"{phone[:5]} {phone[5:]}"
-        plan["phone"] = ("Phone number reports", "google",
-                         {"q": f'"{phone}" OR "{spaced}" OR "+91 {spaced}" OR "+91{phone}"', "num": 10, **region})
+        typed = re.sub(r"\s+", " ", vendor["phone"]).strip()
+        # Mobiles are written as 98450 12345; landlines keep the STD code's 0, as in 040 6699 3333, so the number as typed goes in too
+        variants = dict.fromkeys([typed, phone, spaced, f"+91 {spaced}", f"0{phone}"] if not phone.startswith(("6", "7", "8", "9"))
+                                 else [phone, spaced, f"+91 {spaced}", f"+91{phone}", typed])
+        plan["phone"] = ("Phone number reports", "google", {"q": " OR ".join(f'"{v}"' for v in variants), "num": 10, **region})
     results, listing = {}, None
     with ThreadPoolExecutor(max_workers=6) as pool:
         running = {pool.submit(searches.run, purpose, engine, **params): step for step, (purpose, engine, params) in plan.items()}
