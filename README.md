@@ -2,6 +2,8 @@
 
 **Check a supplier before you pay them.**
 
+[Try it](https://parakh-lemon.vercel.app) (five live checks a day per visitor; the example briefs are free)
+
 *Parakh* (परख) is Hindi for assaying gold: testing what something really is before you accept it.
 
 Indian small businesses pay advances to suppliers they found on IndiaMART, WhatsApp or a referral. Some of those suppliers belong to fake-invoice rackets, have cancelled GST registrations or disappear after the advance. A cancelled or fake GSTIN on your purchase invoice can also cost you the input tax credit you claimed. The warning signs are usually public: a GST directory showing "Cancelled", a news report of a DGGI arrest, a Maps listing marked closed, reviews saying "took advance, never delivered". Nobody has time to look in six places before every payment.
