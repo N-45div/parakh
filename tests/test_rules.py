@@ -85,3 +85,17 @@ def test_listing_prefers_the_open_pin_over_an_old_closed_one():
     assert listing["older_closed"] == ["Ecoren Energy India Pvt Ltd, Old office"]
     only_closed = _listing({"local_results": data["local_results"][:1]}, "Ecoren Energy India Private Limited")
     assert only_closed["permanently_closed"]
+
+
+def test_app_imports_and_serves_examples(tmp_path, monkeypatch):
+    monkeypatch.setenv("PARAKH_CHECKS", str(tmp_path / "checks"))
+    monkeypatch.setenv("PARAKH_CACHE", str(tmp_path / "cache"))
+    monkeypatch.delenv("MONGODB_URI", raising=False)
+    import importlib
+    from fastapi.testclient import TestClient
+    import parakh.app
+    importlib.reload(parakh.app)
+    client = TestClient(parakh.app.app)
+    assert client.get("/api/examples").json() == []
+    assert client.get("/api/checks/nope").status_code == 404
+    assert client.get("/").status_code == 200

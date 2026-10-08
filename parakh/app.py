@@ -14,8 +14,7 @@ from pydantic import BaseModel, Field
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from . import brief, evidence, gstin, judge  # noqa: E402  (settings load first)
-from .search import Searches  # noqa: E402
+from . import judge, pipeline  # noqa: E402  (settings load first)
 from .store import Store, visitor  # noqa: E402
 
 STATIC = Path(__file__).parent / "static"
@@ -44,31 +43,13 @@ def status():
 
 @app.post("/api/check")
 def check(vendor: Vendor, request: Request):
-    v = vendor.model_dump()
-    v["gstin"] = v["gstin"].replace(" ", "").upper()
     ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
     if not store.take(f"visitor:{visitor(ip)}", CHECKS_PER_VISITOR):
         return JSONResponse({"detail": f"You've run {CHECKS_PER_VISITOR} checks today. The example briefs are still open, or run Parakh yourself from GitHub."}, 429)
 
     def events():
-        emit = lambda event: json.dumps(event, ensure_ascii=False) + "\n"
-        yield emit({"step": "gstin", "detail": "Reading what the GSTIN says about itself" if v["gstin"] else "No GSTIN given"})
-        gst = gstin.inspect(v["gstin"], v["name"])
-        searches = Searches(os.environ.get("SERPAPI_API_KEY"), store, offline=os.environ.get("PARAKH_OFFLINE") == "1")
-        # The registry search only makes sense for a well-formed GSTIN
-        for event in evidence.gather({**v, "gstin": v["gstin"] if gst.get("valid") else ""}, searches):
-            if event["step"] == "gathered":
-                gathering = event
-            else:
-                yield emit(event)
-        yield emit({"step": "judge", "detail": f"Reading {len(gathering['items'])} public results with an open model"})
-        try:
-            judged, model = judge.judge(v, gathering["items"], os.environ.get("TINKER_API_KEY"))
-        except Exception as error:  # the brief still works on keyword labels
-            judged, model = [{**i, **judge.fallback(i, v)} for i in gathering["items"]], f"keywords (model unavailable: {type(error).__name__})"
-        result = brief.build(v, gst, gathering, judged, model, searches.log)
-        store.save(result)
-        yield emit({"step": "done", "brief": result})
+        for event in pipeline.run(vendor.model_dump(), store):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
