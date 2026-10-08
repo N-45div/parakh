@@ -15,7 +15,8 @@ DAILY_LIVE_SEARCHES = int(os.environ.get("PARAKH_DAILY_SEARCHES", "60"))
 
 class Searches:
     def __init__(self, api_key: str | None, store: Store, offline: bool = False):
-        self.client = serpapi.Client(api_key=api_key) if api_key else None
+        # One slow search must not stall the whole check (the serverless function has two minutes)
+        self.client = serpapi.Client(api_key=api_key, timeout=45) if api_key else None
         self.offline = offline or not api_key
         self.store = store
         self.log: list[dict] = []
@@ -60,6 +61,8 @@ class Searches:
                 if status < 500 or attempt == attempts - 1:
                     return {"error": f"SerpApi HTTP error: {error}"}
                 time.sleep(2)
+            except OSError as error:  # requests' timeouts and connection errors are OSErrors
+                return {"error": f"SerpApi did not answer in time ({type(error).__name__})"}
         return {"error": "SerpApi unavailable"}
 
 
