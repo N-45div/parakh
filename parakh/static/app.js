@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const STEPS = { gstin: "GSTIN", registry: "GST registries", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", judge: "Open model" };
+const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", judge: "Open model" };
+const STATUS = { strike_off: "struck off", under_liquidation: "under liquidation" };
 const ENGINE = { google: "Google Search", google_maps: "Google Maps", google_maps_reviews: "Google Maps Reviews", google_news: "Google News" };
 const VERDICT = { hold: "Hold", verify: "Verify first", clear: "No red flags" };
 
@@ -49,16 +50,20 @@ function show(b) {
       <dt>PAN</dt><dd class="mono">${esc(g.pan)} · ${esc(g.entity_type || "unknown type")}</dd><dt>Registration</dt><dd>No. ${g.registration_number} under this PAN in ${esc(g.state)}</dd>`
       : `<dt>GSTIN</dt><dd class="mono bad">${esc(g.gstin)} · not valid</dd>`) : `<dt>GSTIN</dt><dd>Not given</dd>`;
   const regRows = r.status ? `<dt>Directory status</dt><dd><span class="pill ${r.status}">${esc(r.status)}</span> ${r.sources.slice(0, 2).map((s) => link(s.link, "source")).join(" ")}</dd>
+      ${r.registered_on ? `<dt>GST registered</dt><dd>${esc(r.registered_on)}</dd>` : ""}
       ${r.legal_names.length ? `<dt>Legal name seen</dt><dd>${r.legal_names.slice(0, 3).map(esc).join("<br>")}</dd>` : ""}` : g.given && g.valid ? `<dt>Directory status</dt><dd>Not found in public directories</dd>` : "";
+  const c = b.identity.company;
+  const companyRows = c ? `<dt>Company record</dt><dd>${c.status ? `<span class="pill ${c.status}">${esc(STATUS[c.status] || c.status)}</span> ` : ""}${c.sources.slice(0, 2).map((s) => link(s.link, "source")).join(" ")}
+      ${c.incorporated ? `<br>Incorporated ${esc(c.incorporated)}` : ""}${c.cin ? `<br><span class="mono">${esc(c.cin)}</span>` : ""}</dd>` : "";
   const mapRows = l ? `<dt>Google Maps</dt><dd>${esc(l.title)}<br><small>${esc(l.address || "")}</small><br>
       ${l.rating ? `${l.rating}★ from ${l.reviews} reviews · ` : ""}${esc(l.type || "")} ${link(l.maps_link, "Open in Maps ↗")}</dd>` : `<dt>Google Maps</dt><dd>No listing found</dd>`;
   const reads = Object.entries(b.read).map(([k, v]) => `${STEPS[k] || k}: ${v.read} read, ${v.about_vendor} about this supplier`).join(" · ");
   $("#brief").innerHTML = `
     <div class="verdict ${b.verdict}"><span class="label">${VERDICT[b.verdict]}</span><h2>${esc(b.headline)}</h2>
       <p>${esc(b.vendor.name)} · ${esc(b.vendor.city)}${b.vendor.gstin ? " · " + esc(b.vendor.gstin) : ""}</p>
-      <button class="print" onclick="window.print()">Save as PDF</button></div>
+      <div class="actions"><button onclick="copyText()">Copy for WhatsApp</button><button onclick="copyLink()">Copy link</button><button onclick="window.print()">Save as PDF</button></div></div>
     <div class="grid">
-      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${mapRows}</dl></section>
+      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${companyRows}${mapRows}</dl></section>
       <section class="panel"><h3>Before you pay</h3><ol class="steps">${b.next_steps.map((s) => `<li>${esc(s.text)} ${link(s.link, "Open ↗")}</li>`).join("")}</ol></section>
     </div>
     <section class="panel"><h3>What the public record shows <small>${b.flags.length ? b.flags.length + " finding" + (b.flags.length > 1 ? "s" : "") : ""}</small></h3>
@@ -72,7 +77,25 @@ function show(b) {
         <td>${s.error ? `<span class="bad">${esc(s.error)}</span>` : s.results}${s.cached ? " <small>cached</small>" : ""}</td></tr>`).join("")}</tbody></table>
       <p class="fine">${esc(reads)}</p></section>`;
   $("#brief").hidden = false;
+  current = b;
+  history.replaceState(null, "", `?check=${b.id}`);
 }
+
+let current = null;
+const SEV = { high: "HIGH", medium: "MEDIUM", low: "low" };
+function summary(b) {
+  const r = b.identity.registry, c = b.identity.company;
+  const lines = [`*Parakh check: ${b.vendor.name}, ${b.vendor.city}*`, `${VERDICT[b.verdict]}: ${b.headline}`];
+  if (b.vendor.gstin) lines.push(`GSTIN ${b.vendor.gstin}${r.status ? `: ${r.status} in public directories` : ""}${r.registered_on ? `, registered ${r.registered_on}` : ""}`);
+  if (c && c.status) lines.push(`Company: ${STATUS[c.status] || c.status}${c.incorporated ? `, incorporated ${c.incorporated}` : ""}`);
+  const serious = b.flags.filter((f) => f.severity !== "low");
+  if (serious.length) lines.push("", "Findings:", ...serious.map((f) => `• [${SEV[f.severity]}] ${f.text}${f.link ? ` ${f.link}` : ""}`));
+  lines.push("", "Before you pay:", ...b.next_steps.map((s, i) => `${i + 1}. ${s.text}`), "", `Full brief: ${location.origin}/?check=${b.id}`);
+  return lines.join("\n");
+}
+async function copyText() { await navigator.clipboard.writeText(summary(current)); toast("Summary copied. Paste it into WhatsApp."); }
+async function copyLink() { await navigator.clipboard.writeText(`${location.origin}/?check=${current.id}`); toast("Link copied. Anyone with it can open this brief."); }
+function toast(text) { const t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
 
 $("#form").onsubmit = async (event) => {
   event.preventDefault();
@@ -103,3 +126,5 @@ $("#form").onsubmit = async (event) => {
 };
 
 status(); recent();
+const shared = new URLSearchParams(location.search).get("check");
+if (shared) fetch(`/api/checks/${encodeURIComponent(shared)}`).then((r) => r.ok ? r.json() : null).then((b) => b && show(b));

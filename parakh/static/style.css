@@ -47,7 +47,10 @@ button { font: inherit; cursor: pointer; }
 .verdict.hold { background: var(--hold-soft); border-color: #f3c3bd; } .verdict.hold .label { color: var(--hold); }
 .verdict.verify { background: var(--verify-soft); border-color: #f2d2a9; } .verdict.verify .label { color: var(--verify); }
 .verdict.clear { background: var(--clear-soft); border-color: #b8e0c8; } .verdict.clear .label { color: var(--clear); }
-.print { position: absolute; right: 20px; top: 20px; border: 1px solid #cfd4da; background: #fff; border-radius: 8px; padding: 7px 12px; font-size: 13px; }
+.actions { position: absolute; right: 20px; top: 20px; display: flex; gap: 8px; }
+.actions button { border: 1px solid #cfd4da; background: #fff; border-radius: 8px; padding: 7px 12px; font-size: 13px; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; }
+.pill.strike_off, .pill.under_liquidation { background: var(--hold-soft); color: var(--hold); } .pill.dormant { background: var(--verify-soft); color: var(--verify); }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 dl { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; margin: 0; font-size: 14px; }
 dt { color: var(--muted); } dd { margin: 0; line-height: 1.5; } dd small { color: var(--muted); }
@@ -73,4 +76,4 @@ details { margin-top: 6px; font-size: 13px; } details ul { padding-left: 18px; l
 .searches td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 .searches td small { color: var(--muted); }
 @media (max-width: 980px) { .layout { grid-template-columns: 1fr; padding: 16px; } .grid { grid-template-columns: 1fr; } .top { padding: 14px 16px; } }
-@media print { .top, .side, .print, .progress { display: none !important; } .layout { display: block; padding: 0; } body { background: #fff; } .panel { break-inside: avoid; } }
+@media print { .top, .side, .actions, .progress, .toast { display: none !important; } .layout { display: block; padding: 0; } body { background: #fff; } .panel { break-inside: avoid; } }
