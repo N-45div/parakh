@@ -1,0 +1,102 @@
+"""Fixed rules turn the GSTIN check, the Maps listing and the labelled results into a brief. No model decides the verdict."""
+import time
+import uuid
+
+RANK = {"high": 0, "medium": 1, "low": 2, "none": 3}
+SOURCE_NAMES = {"registry": "GST registry listing", "reviews": "Google Maps review", "news": "News",
+                "court": "Court record", "complaints": "Complaint or forum post"}
+VERDICTS = {
+    "hold": "Hold the payment until you have checked these",
+    "verify": "Pay only after the checks below",
+    "clear": "No red flags in the public records searched",
+}
+
+
+def _flag(severity, text, source, link=None, quote="", date=None, publisher=None):
+    return {"severity": severity, "text": text, "source": source, "link": link, "quote": quote, "date": date, "publisher": publisher}
+
+
+def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: str, searches: list[dict]) -> dict:
+    listing, flags, identity = gathered.get("listing"), [], {}
+
+    for f in gst.get("flags", []):
+        flags.append(_flag(f["severity"], f["text"], "GSTIN check (offline)"))
+
+    registry = [j for j in judged if j["kind"] == "registry_record" and j["about_vendor"] != "no"]
+    statuses = {j["status"] for j in registry if j["status"]}
+    names = sorted({j["legal_name"] for j in registry if j["legal_name"]})
+    identity["registry"] = {"status": next((s for s in ("cancelled", "suspended", "inactive", "active") if s in statuses), None),
+                            "legal_names": names, "sources": [{"title": j["title"], "link": j["link"], "quote": j["quote"]} for j in registry[:4]]}
+    status = identity["registry"]["status"]
+    if status in ("cancelled", "suspended"):
+        flags.append(_flag("high", f"Public GST directories list this GSTIN as {status}. Invoices from a {status} registration can cost you the input tax credit.",
+                           "GST registry listing", registry[0]["link"], next((j["quote"] for j in registry if j["quote"]), "")))
+    elif status == "inactive":
+        flags.append(_flag("medium", "A public GST directory lists this GSTIN as inactive. Confirm its current status on the GST portal.",
+                           "GST registry listing", registry[0]["link"]))
+    if gst.get("given") and gst.get("valid") and not registry:
+        flags.append(_flag("low", "No public GST directory listing mentions this GSTIN. New registrations take time to appear; confirm it on the GST portal.", "GST registry search"))
+    if len(names) > 1:
+        flags.append(_flag("low", f"Directories show different legal names for this GSTIN: {', '.join(names[:3])}. The invoice name should match one exactly.", "GST registry listing"))
+
+    identity["listing"] = listing
+    if not listing:
+        flags.append(_flag("low", f"No Google Maps listing found for {gathered['core_name']} in {vendor['city']}. Many small suppliers have none; ask for an address you can visit.", "Google Maps"))
+    else:
+        if listing["permanently_closed"]:
+            flags.append(_flag("high", "Google Maps marks this business as permanently closed.", "Google Maps", listing.get("maps_link")))
+        elif listing["temporarily_closed"]:
+            flags.append(_flag("medium", "Google Maps marks this business as temporarily closed.", "Google Maps", listing.get("maps_link")))
+        if not listing["name_matches"]:
+            flags.append(_flag("low", f"The closest Maps listing is “{listing['title']}”, which may be a different business.", "Google Maps", listing.get("maps_link")))
+        elif gst.get("valid") and gst.get("state") and listing.get("address") and gst["state"].lower() not in listing["address"].lower():
+            flags.append(_flag("medium", f"The GSTIN is registered in {gst['state']}, but the Maps listing is at {listing['address']}. A branch is possible; ask which registration will invoice you.", "GSTIN + Google Maps", listing.get("maps_link")))
+
+    about = [j for j in judged if j["about_vendor"] == "yes" and j["severity"] != "none" and j["kind"] != "registry_record"]
+    for j in about:
+        if j["severity"] != "low":
+            flags.append(_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]))
+    # Routine mentions are summarised per source instead of listed one by one
+    for source in dict.fromkeys(j["source"] for j in about if j["severity"] == "low"):
+        group = [j for j in about if j["severity"] == "low" and j["source"] == source]
+        label = SOURCE_NAMES.get(source, source)
+        flag = _flag("low", f"{len(group)} routine {label.lower()}{'s' if len(group) > 1 else ''} name this supplier (consumer disputes, ordinary complaints or cases it brought).", label)
+        flag["items"] = [{"text": j["finding"] or j["title"], "link": j["link"], "quote": j["quote"]} for j in group]
+        flags.append(flag)
+    clashes = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],
+                "severity": j["severity"], "date": j["date"], "publisher": j["publisher"]}
+               for j in judged if j["about_vendor"] == "unclear" and j["severity"] in ("high", "medium") and j["kind"] != "registry_record"]
+    flags.sort(key=lambda f: RANK[f["severity"]])
+
+    severities = {f["severity"] for f in flags}
+    verdict = "hold" if "high" in severities else "verify" if ("medium" in severities or clashes or not gst.get("given")) else "clear"
+
+    steps = []
+    if gst.get("given"):
+        steps.append({"text": "Confirm the GSTIN's status, legal name and registration date on the GST portal (Search Taxpayer).", "link": "https://services.gst.gov.in/services/searchtp"})
+    else:
+        steps.append({"text": "Ask for the GSTIN and run this check again. Without it you cannot claim input tax credit on the invoice.", "link": None})
+    if gst.get("entity_type") in ("company", "firm or LLP"):
+        steps.append({"text": "Look the company or LLP up on the MCA portal: is it active, and who are the directors?", "link": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"})
+    steps.append({"text": "Ask for a cancelled cheque or bank letter in the same legal name as the invoice before you pay.", "link": None})
+    if clashes:
+        steps.append({"text": f"Rule out the {len(clashes)} result{'s' if len(clashes) > 1 else ''} below about a business with a similar name.", "link": None})
+    if verdict != "clear":
+        steps.append({"text": "Keep any advance small, or pay against delivery, until the flags are resolved.", "link": None})
+
+    by_source = {}
+    for j in judged:
+        s = by_source.setdefault(j["source"], {"read": 0, "about_vendor": 0, "unclear": 0})
+        s["read"] += 1
+        s["about_vendor"] += j["about_vendor"] == "yes"
+        s["unclear"] += j["about_vendor"] == "unclear"
+
+    return {
+        "id": uuid.uuid4().hex[:12], "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "vendor": vendor,
+        "verdict": verdict, "headline": VERDICTS[verdict], "flags": flags, "clashes": clashes, "next_steps": steps,
+        "identity": {**identity, "gstin": {k: v for k, v in gst.items() if k != "flags"}},
+        "read": by_source, "model": model, "searches": searches,
+        "limits": ["Whether the supplier actually files GST returns (the GST portal shows this)",
+                   "Who owns the bank account you are about to pay",
+                   "Disputes that never reached the news, the courts or online reviews"],
+    }
