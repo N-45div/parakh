@@ -1,46 +1,65 @@
-"""SerpApi calls through the official client, cached on disk and logged for the brief's "searches run" panel."""
+"""SerpApi calls through the official client, cached by their parameters and logged for the brief's "searches run" panel."""
 import hashlib
 import json
 import os
+import threading
 import time
-from pathlib import Path
 
 import serpapi
 
-CACHE = Path(os.environ.get("PARAKH_CACHE", Path(__file__).resolve().parents[1] / "cache"))
+from .store import Store
+
+# Live SerpApi calls allowed per day across all visitors; cached results are always free
+DAILY_LIVE_SEARCHES = int(os.environ.get("PARAKH_DAILY_SEARCHES", "60"))
 
 
 class Searches:
-    def __init__(self, api_key: str | None, offline: bool = False):
+    def __init__(self, api_key: str | None, store: Store, offline: bool = False):
         self.client = serpapi.Client(api_key=api_key) if api_key else None
         self.offline = offline or not api_key
+        self.store = store
         self.log: list[dict] = []
-        CACHE.mkdir(parents=True, exist_ok=True)
+        self.lock = threading.Lock()
 
     def run(self, purpose: str, engine: str, shown: str | None = None, **params) -> dict:
         query = {"engine": engine, **params}
-        path = CACHE / (hashlib.sha1(json.dumps(query, sort_keys=True).encode()).hexdigest()[:20] + ".json")
+        key = hashlib.sha1(json.dumps(query, sort_keys=True).encode()).hexdigest()[:20]
         began = time.monotonic()
-        if path.exists():
-            data, cached = json.loads(path.read_text(encoding="utf-8")), True
-        elif self.offline:
-            data, cached = {"error": "Offline: no cached result for this search."}, True
-        else:
-            try:
-                data = dict(self.client.search(query))
-            except serpapi.HTTPError as error:
-                data = {"error": f"SerpApi HTTP error: {error}"}
-            cached = False
-            if "hasn't returned any results" in str(data.get("error", "")):
-                data = {"search_metadata": data.get("search_metadata"), "empty": True}
-            if not data.get("error"):
-                path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        self.log.append({"purpose": purpose, "engine": engine,
-                         "query": shown or params.get("q") or params.get("data_id") or "",
-                         "results": count(data), "cached": cached, "error": data.get("error"),
-                         "seconds": round(time.monotonic() - began, 2),
-                         "search_id": (data.get("search_metadata") or {}).get("id")})
+        data, cached = self.store.cached(key), True
+        if data is None:
+            if self.offline:
+                data = {"error": "Offline: no cached result for this search."}
+            elif not self.store.take("live-searches", DAILY_LIVE_SEARCHES):
+                data = {"error": "Today's live-search budget is used up. Cached and example checks still work."}
+            else:
+                data, cached = self._fetch(query), False
+                if "hasn't returned any results" in str(data.get("error", "")):
+                    data = {"search_metadata": data.get("search_metadata"), "empty": True}
+                if not data.get("error"):
+                    self.store.remember(key, data)
+        with self.lock:
+            self.log.append({"purpose": purpose, "engine": engine,
+                             "query": shown or params.get("q") or params.get("data_id") or "",
+                             "results": count(data), "cached": cached, "error": data.get("error"),
+                             "seconds": round(time.monotonic() - began, 2),
+                             "search_id": (data.get("search_metadata") or {}).get("id")})
         return data
+
+    def last(self, purpose: str) -> dict:
+        with self.lock:
+            return next(entry for entry in reversed(self.log) if entry["purpose"] == purpose)
+
+    def _fetch(self, query: dict, attempts: int = 2) -> dict:
+        for attempt in range(attempts):
+            try:
+                return dict(self.client.search(query))
+            except serpapi.HTTPError as error:
+                status = getattr(getattr(error, "response", None), "status_code", 0) or 0
+                # A server-side hiccup is worth one retry; a bad request or an exhausted plan is not
+                if status < 500 or attempt == attempts - 1:
+                    return {"error": f"SerpApi HTTP error: {error}"}
+                time.sleep(2)
+        return {"error": "SerpApi unavailable"}
 
 
 def count(data: dict) -> int:
