@@ -14,11 +14,13 @@ Parakh does that in about a minute and writes a brief:
 - **Findings with verbatim quotes**, each linked to its source. A quote is shown only if it really appears in that source.
 - **Namesakes kept apart:** results that may be about a different business with a similar name are listed separately and never trigger a hold.
 - **What to do before paying:** the GST portal, the MCA portal, a cancelled cheque in the same legal name, a smaller advance.
+- **Young registrations flagged:** a GSTIN registered under six months ago, or a company incorporated under a year ago, is a common pattern in fake-invoice rackets.
+- **Shareable:** *Copy for WhatsApp* writes a plain-text summary for a partner or accountant; *Copy link* opens the same brief.
 - **What the check cannot tell you**, stated plainly.
 
 ## How SerpApi is used
 
-Each check runs these searches through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
+Each check runs six to eight of these searches, in parallel, through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
 
 | Search | SerpApi engine | Why |
 | --- | --- | --- |
@@ -28,6 +30,8 @@ Each check runs these searches through the official [`serpapi`](https://pypi.org
 | Name + raid, arrest, fake invoice, GST evasion… | Google News | Enforcement coverage |
 | Name on `site:indiankanoon.org` | Google Search | Court records, with the supplier's role in each case |
 | Name + city + complaint, scam, cheated… | Google Search | Complaint sites and forums |
+| Name on Zauba, Tofler and other MCA mirrors (companies and LLPs) | Google Search | Company status (active, struck off, in liquidation, amalgamated), incorporation date, CIN |
+| The supplier's phone or WhatsApp number (optional) | Google Search | Scam and complaint reports that cite the number |
 
 Every call is cached on disk by its parameters, so repeating a check costs no credits, and every brief lists the searches behind it.
 
