@@ -10,12 +10,19 @@ async function status() {
     <span class="${s.model ? "on" : "off"}">${s.model ? esc(s.model) + " on Tinker" : "No model key: keyword labels"}</span>`;
 }
 
+// Briefs are private to the browser that ran them: only their IDs are kept here, never shared
+const mine = () => { try { return JSON.parse(localStorage.getItem("parakh-checks") || "[]"); } catch { return []; } };
+const keep = (b) => { try { localStorage.setItem("parakh-checks", JSON.stringify([{ id: b.id, name: b.vendor.name, city: b.vendor.city, verdict: b.verdict, created_at: b.created_at }, ...mine().filter((c) => c.id !== b.id)].slice(0, 12))); } catch {} };
+const row = (c, note) => `<li><button data-id="${c.id}"><span class="dot ${c.verdict}"></span><b>${esc(c.name)}</b>
+  <small>${esc(note || c.city + " · " + new Date(c.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }))}</small></button></li>`;
+
 async function recent() {
-  const items = await (await fetch("/api/checks")).json();
-  $("#recent").innerHTML = items.length ? items.map((c) => `<li><button data-id="${c.id}"><span class="dot ${c.verdict}"></span>
-    <b>${esc(c.name)}</b><small>${esc(c.city)} · ${new Date(c.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></button></li>`).join("")
-    : `<li class="fine">None yet.</li>`;
-  $("#recent").querySelectorAll("button").forEach((b) => b.onclick = async () => show(await (await fetch(`/api/checks/${b.dataset.id}`)).json()));
+  const own = mine();
+  $("#recent").innerHTML = own.length ? own.map((c) => row(c)).join("") : `<li class="fine">None yet. Your checks stay in this browser.</li>`;
+  const examples = await (await fetch("/api/examples")).json();
+  $("#examples").innerHTML = examples.map((c) => row(c, `${c.city}${c.gstin ? " · " + c.gstin : ""}${c.note ? " · " + c.note : ""}`)).join("");
+  $("#examples-panel").hidden = !examples.length;
+  document.querySelectorAll(".side li button").forEach((b) => b.onclick = async () => show(await (await fetch(`/api/checks/${b.dataset.id}`)).json()));
 }
 
 function step(e) {
@@ -75,7 +82,7 @@ $("#form").onsubmit = async (event) => {
   $("#progress").innerHTML = ""; $("#progress").hidden = false;
   try {
     const response = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!response.ok) throw new Error((await response.json()).detail?.[0]?.msg || "Check failed");
+    if (!response.ok) { const d = (await response.json()).detail; throw new Error(typeof d === "string" ? d : d?.[0]?.msg || "Check failed"); }
     const reader = response.body.getReader(), decoder = new TextDecoder();
     let buffer = "";
     for (;;) {
@@ -85,7 +92,7 @@ $("#form").onsubmit = async (event) => {
       let nl;
       while ((nl = buffer.indexOf("\n")) >= 0) {
         const e = JSON.parse(buffer.slice(0, nl)); buffer = buffer.slice(nl + 1);
-        if (e.step === "done") { $("#progress").hidden = true; show(e.brief); recent(); } else step(e);
+        if (e.step === "done") { $("#progress").hidden = true; keep(e.brief); show(e.brief); recent(); } else step(e);
       }
     }
   } catch (error) {
