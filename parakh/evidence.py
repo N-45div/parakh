@@ -1,4 +1,5 @@
 """The searches Parakh runs for one supplier, and the public results they return, normalised."""
+import html
 import re
 
 from .search import Searches
@@ -35,7 +36,7 @@ def _listing(data: dict, name: str) -> dict | None:
         return None
     hours = " ".join(str(v) for v in (place.get("operating_hours") or {}).values())
     state = f"{place.get('open_state', '')} {hours}"
-    return {"title": place.get("title"), "address": place.get("address"), "rating": place.get("rating"),
+    return {"title": html.unescape(place.get("title") or ""), "address": html.unescape(place.get("address") or ""), "rating": place.get("rating"),
             "reviews": place.get("reviews"), "type": place.get("type"), "website": place.get("website"),
             "phone": place.get("phone"), "data_id": place.get("data_id"), "place_id": place.get("place_id"),
             "permanently_closed": "permanently closed" in state.lower(),
@@ -63,7 +64,8 @@ def gather(vendor: dict, searches: Searches):
     yield done("listing", f"Google Maps: {listing['title']}" if listing else "Google Maps: no listing found")
 
     if listing and listing.get("data_id") and (listing.get("reviews") or 0) > 0:
-        reviews = searches.run("Lowest-rated reviews", "google_maps_reviews", data_id=listing["data_id"], sort_by="ratingLow", hl="en")
+        reviews = searches.run("Lowest-rated reviews", "google_maps_reviews", shown=f"reviews of {listing['title']}",
+                              data_id=listing["data_id"], sort_by="ratingLow", hl="en")
         items += [_item("reviews", i, f"{r.get('rating')}★ review", r.get("snippet") or (r.get("extracted_snippet") or {}).get("original"),
                         r.get("link"), r.get("iso_date") or r.get("date"), "Google Maps review")
                   for i, r in enumerate((reviews.get("reviews") or [])[:8]) if (r.get("rating") or 5) <= 3]

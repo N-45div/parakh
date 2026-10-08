@@ -17,7 +17,7 @@ class Searches:
         self.log: list[dict] = []
         CACHE.mkdir(parents=True, exist_ok=True)
 
-    def run(self, purpose: str, engine: str, **params) -> dict:
+    def run(self, purpose: str, engine: str, shown: str | None = None, **params) -> dict:
         query = {"engine": engine, **params}
         path = CACHE / (hashlib.sha1(json.dumps(query, sort_keys=True).encode()).hexdigest()[:20] + ".json")
         began = time.monotonic()
@@ -34,7 +34,7 @@ class Searches:
             if not data.get("error"):
                 path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         self.log.append({"purpose": purpose, "engine": engine,
-                         "query": params.get("q") or params.get("data_id") or "",
+                         "query": shown or params.get("q") or params.get("data_id") or "",
                          "results": count(data), "cached": cached, "error": data.get("error"),
                          "seconds": round(time.monotonic() - began, 2),
                          "search_id": (data.get("search_metadata") or {}).get("id")})

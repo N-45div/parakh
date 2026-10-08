@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parakh: check a supplier before you pay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">पर</span><div><b>Parakh</b><small>Check a supplier before you pay</small></div></div>
+  <div class="status" id="status"></div>
+</header>
+<main class="layout">
+  <aside class="side">
+    <form id="form" class="panel">
+      <h1>Who are you about to pay?</h1>
+      <p class="hint">Parakh reads public records about a supplier (GST directories, Google Maps, reviews, news, court records and complaint sites) and tells you what to check before money leaves your account.</p>
+      <label>Supplier name<input name="name" required placeholder="e.g. Sri Balaji Steels Pvt Ltd" autocomplete="off"></label>
+      <label>City<input name="city" required placeholder="e.g. Bengaluru" autocomplete="off"></label>
+      <label>GSTIN <span class="opt">from their quote or invoice</span><input name="gstin" maxlength="20" placeholder="15 characters, e.g. 29AAACT2727Q1ZS" autocomplete="off"></label>
+      <button type="submit" id="go">Check this supplier</button>
+      <p class="fine">About six searches per check, cached so a repeat check costs nothing.</p>
+    </form>
+    <section class="panel recent">
+      <h2>Recent checks</h2>
+      <ul id="recent"><li class="fine">None yet.</li></ul>
+    </section>
+  </aside>
+  <section class="main" id="main">
+    <div class="empty" id="empty">
+      <h2>Before an advance, a two-minute check.</h2>
+      <p>Fake-invoice rackets, cancelled GST registrations and suppliers who disappear after the advance all leave public traces. Parakh finds them, quotes them word for word, and keeps "we couldn't tell" separate from "we found something".</p>
+      <ol>
+        <li><b>Offline GSTIN check:</b> format, the official check digit, state and the PAN's taxpayer type</li>
+        <li><b>Public records through SerpApi:</b> GST directories, Google Maps and its lowest-rated reviews, news, Indian Kanoon, complaint sites</li>
+        <li><b>An open model reads every result:</b> is it about this supplier or a namesake? Every quote is checked against the source</li>
+        <li><b>Fixed rules decide the verdict:</b> hold, verify or clear, with what to do next</li>
+      </ol>
+    </div>
+    <ol class="progress" id="progress" hidden></ol>
+    <article id="brief" hidden></article>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
