@@ -16,6 +16,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")
 from parakh import pipeline  # noqa: E402  (keys load first)
+from parakh.search import slim  # noqa: E402
 from parakh.store import Store  # noqa: E402
 
 EXAMPLES = [
@@ -29,7 +30,7 @@ store = Store()
 copied = 0
 for path in sorted((ROOT / "cache").glob("*.json")):
     if store.cached(path.stem) is None:
-        store.remember(path.stem, json.loads(path.read_text(encoding="utf-8")))
+        store.remember(path.stem, slim(json.loads(path.read_text(encoding="utf-8"))))
         copied += 1
 print(f"copied {copied} cached searches")
 for vendor, note in EXAMPLES:

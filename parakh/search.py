@@ -36,6 +36,7 @@ class Searches:
                 if "hasn't returned any results" in str(data.get("error", "")):
                     data = {"search_metadata": data.get("search_metadata"), "empty": True}
                 if not data.get("error"):
+                    data = slim(data)
                     self.store.remember(key, data)
         with self.lock:
             self.log.append({"purpose": purpose, "engine": engine,
@@ -60,6 +61,29 @@ class Searches:
                     return {"error": f"SerpApi HTTP error: {error}"}
                 time.sleep(2)
         return {"error": "SerpApi unavailable"}
+
+
+KEEP = {
+    "organic_results": ("title", "snippet", "link", "date", "source", "displayed_link"),
+    "news_results": ("title", "snippet", "link", "date", "source"),
+    "local_results": ("title", "address", "rating", "reviews", "type", "website", "phone", "data_id", "place_id",
+                      "open_state", "hours", "operating_hours"),
+    "reviews": ("rating", "snippet", "extracted_snippet", "link", "iso_date", "date"),
+    "topics": ("keyword", "mentions"),
+}
+
+
+def slim(data: dict) -> dict:
+    """Only the fields Parakh reads, so a cached response is kilobytes rather than hundreds of them."""
+    out = {"search_metadata": {"id": (data.get("search_metadata") or {}).get("id")}}
+    for key, fields in KEEP.items():
+        if isinstance(data.get(key), list):
+            out[key] = [{f: row[f] for f in fields if f in row} for row in data[key]]
+    if isinstance(data.get("place_results"), dict):
+        out["place_results"] = {f: data["place_results"][f] for f in KEEP["local_results"] if f in data["place_results"]}
+    if data.get("empty"):
+        out["empty"] = True
+    return out
 
 
 def count(data: dict) -> int:
