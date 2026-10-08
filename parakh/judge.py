@@ -9,11 +9,13 @@ import os
 import re
 
 import httpx
+from concurrent.futures import ThreadPoolExecutor
 
 ENDPOINT = os.environ.get("JUDGE_BASE_URL", "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1")
 MODEL = os.environ.get("JUDGE_MODEL", "Qwen/Qwen3.6-27B")
 KINDS = {"fraud_or_enforcement", "court_case", "customer_complaint", "registry_record", "business_listing", "neutral", "positive"}
 SEVERITIES = {"high", "medium", "low", "none"}
+BATCH = 8
 
 SYSTEM = """You help an Indian small business check a supplier before paying them. You get public search results.
 Judge each result only from its own text. Never assume a result is about the supplier because the name is similar.
@@ -58,14 +60,19 @@ def judge(vendor: dict, items: list[dict], api_key: str | None) -> tuple[list[di
     supplier = {k: vendor.get(k) for k in ("name", "city", "gstin") if vendor.get(k)}
     results = [{"id": i["id"], "source": i["source"], "publisher": i.get("publisher"), "date": i.get("date"),
                 "title": i["title"][:300], "text": i["snippet"][:600]} for i in items]
-    response = httpx.post(f"{ENDPOINT}/chat/completions", timeout=120, headers={"Authorization": f"Bearer {api_key}"}, json={
-        "model": MODEL, "temperature": 0, "max_tokens": 4000, "reasoning_effort": False,
-        "messages": [{"role": "system", "content": SYSTEM},
-                     {"role": "user", "content": json.dumps({"supplier": supplier, "results": results}, ensure_ascii=False)}]})
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    parsed = json.loads(re.search(r"\{.*\}", content, re.S).group(0))
-    labels = {str(r.get("id")): r for r in parsed.get("results", [])}
+    def ask(batch):
+        response = httpx.post(f"{ENDPOINT}/chat/completions", timeout=90, headers={"Authorization": f"Bearer {api_key}"}, json={
+            "model": MODEL, "temperature": 0, "max_tokens": 1800, "reasoning_effort": False,
+            "messages": [{"role": "system", "content": SYSTEM},
+                         {"role": "user", "content": json.dumps({"supplier": supplier, "results": batch}, ensure_ascii=False)}]})
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return json.loads(re.search(r"\{.*\}", content, re.S).group(0)).get("results", [])
+
+    # Small batches in parallel: the same labels, a fraction of the wait
+    batches = [results[i:i + BATCH] for i in range(0, len(results), BATCH)]
+    with ThreadPoolExecutor(max_workers=len(batches)) as pool:
+        labels = {str(r.get("id")): r for answer in pool.map(ask, batches) for r in answer}
     judged = []
     for item in items:
         label = labels.get(item["id"]) or fallback(item, vendor)

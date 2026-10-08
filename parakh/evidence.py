@@ -1,6 +1,7 @@
 """The searches Parakh runs for one supplier, and the public results they return, normalised."""
 import html
 import re
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 from .search import Searches
 
@@ -55,44 +56,57 @@ def _listing(data: dict, name: str) -> dict | None:
 
 
 def gather(vendor: dict, searches: Searches):
-    """Yields a progress event after each search, then {"step": "gathered", ...} with the results."""
+    """Runs the searches in parallel and yields a progress event as each one lands, then {"step": "gathered", ...}."""
     name, city, gstin = vendor["name"].strip(), vendor["city"].strip(), vendor.get("gstin") or ""
     core = core_name(name)
-    items: list[dict] = []
     region = {"gl": "in", "hl": "en"}
-
-    def done(step, detail):
-        last = searches.log[-1]
-        return {"step": step, "detail": detail, "results": last["results"], "cached": last["cached"], "error": last["error"]}
-
+    plan = {
+        "listing": ("Business listing", "google_maps", {"q": f"{core} {city}", "type": "search", **region}),
+        "news": ("News: enforcement or fraud", "google_news",
+                 {"q": f'"{core}" (fraud OR raid OR arrested OR "fake invoice" OR "GST evasion" OR cheating OR scam)', **region}),
+        "court": ("Court records", "google", {"q": f'"{core}" site:indiankanoon.org', "num": 10, **region}),
+        "complaints": ("Complaints and scam reports", "google",
+                       {"q": f'"{core}" {city} (complaint OR scam OR fraud OR cheated OR "not delivered")', "num": 10, **region}),
+    }
     if gstin:
-        items += _organic("registry", searches.run("GST registry listings", "google", q=f'"{gstin}"', num=10, **region))
-        yield done("registry", "Searched GST registry listings for the GSTIN")
+        plan["registry"] = ("GST registry listings", "google", {"q": f'"{gstin}"', "num": 10, **region})
+    results, listing = {}, None
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        running = {pool.submit(searches.run, purpose, engine, **params): step for step, (purpose, engine, params) in plan.items()}
+        while running:
+            finished, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in finished:
+                step = running.pop(future)
+                results[step] = future.result()
+                if step == "listing":
+                    listing = _listing(results[step], name)
+                    detail = f"Google Maps: {listing['title']}" if listing else "Google Maps: no listing found"
+                    # The reviews lookup needs the listing's Maps ID, so it starts as soon as the listing lands
+                    if listing and listing.get("data_id") and (listing.get("reviews") or 0) > 0:
+                        plan["reviews"] = ("Lowest-rated reviews", "google_maps_reviews", {})
+                        running[pool.submit(searches.run, "Lowest-rated reviews", "google_maps_reviews", shown=f"reviews of {listing['title']}",
+                                            data_id=listing["data_id"], sort_by="ratingLow", hl="en")] = "reviews"
+                else:
+                    detail = DETAILS[step](listing)
+                entry = searches.last(plan[step][0])
+                yield {"step": step, "detail": detail, "results": entry["results"], "cached": entry["cached"], "error": entry["error"]}
 
-    listing = _listing(searches.run("Business listing", "google_maps", q=f"{core} {city}", type="search", **region), name)
-    yield done("listing", f"Google Maps: {listing['title']}" if listing else "Google Maps: no listing found")
-
-    if listing and listing.get("data_id") and (listing.get("reviews") or 0) > 0:
-        reviews = searches.run("Lowest-rated reviews", "google_maps_reviews", shown=f"reviews of {listing['title']}",
-                              data_id=listing["data_id"], sort_by="ratingLow", hl="en")
-        items += [_item("reviews", i, f"{r.get('rating')}★ review", r.get("snippet") or (r.get("extracted_snippet") or {}).get("original"),
-                        r.get("link"), r.get("iso_date") or r.get("date"), "Google Maps review")
-                  for i, r in enumerate((reviews.get("reviews") or [])[:8]) if (r.get("rating") or 5) <= 3]
-        yield done("reviews", f"Read the lowest-rated of {listing['reviews']} Google reviews")
-
-    news = searches.run("News: enforcement or fraud", "google_news",
-                        q=f'"{core}" (fraud OR raid OR arrested OR "fake invoice" OR "GST evasion" OR cheating OR scam)', **region)
+    items = _organic("registry", results.get("registry", {}))
+    items += [_item("reviews", i, f"{r.get('rating')}★ review", r.get("snippet") or (r.get("extracted_snippet") or {}).get("original"),
+                    r.get("link"), r.get("iso_date") or r.get("date"), "Google Maps review")
+              for i, r in enumerate((results.get("reviews", {}).get("reviews") or [])[:8]) if (r.get("rating") or 5) <= 3]
     items += [_item("news", i, n.get("title"), n.get("snippet") or "", n.get("link"), n.get("date"), (n.get("source") or {}).get("name"))
-              for i, n in enumerate((news.get("news_results") or [])[:8]) if n.get("link")]
-    yield done("news", "Searched news for raids, arrests, fake invoices and fraud")
-
-    items += _organic("court", searches.run("Court records", "google", q=f'"{core}" site:indiankanoon.org', num=10, **region))
-    yield done("court", "Searched court records on Indian Kanoon")
-
-    items += _organic("complaints", searches.run("Complaints and scam reports", "google",
-                      q=f'"{core}" {city} (complaint OR scam OR fraud OR cheated OR "not delivered")', num=10, **region))
-
-    yield done("complaints", "Searched complaint and scam reports")
+              for i, n in enumerate((results["news"].get("news_results") or [])[:8]) if n.get("link")]
+    items += _organic("court", results["court"]) + _organic("complaints", results["complaints"])
     # Two searches can find the same page; it is one piece of evidence
     unique = list({i["link"] or i["id"]: i for i in items if i["title"] or i["snippet"]}.values())
     yield {"step": "gathered", "core_name": core, "listing": listing, "items": unique}
+
+
+DETAILS = {
+    "registry": lambda listing: "Searched GST registry listings for the GSTIN",
+    "reviews": lambda listing: f"Read the lowest-rated of {listing['reviews']} Google reviews",
+    "news": lambda listing: "Searched news for raids, arrests, fake invoices and fraud",
+    "court": lambda listing: "Searched court records on Indian Kanoon",
+    "complaints": lambda listing: "Searched complaint and scam reports",
+}
