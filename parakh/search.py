@@ -31,6 +31,8 @@ class Searches:
             except serpapi.HTTPError as error:
                 data = {"error": f"SerpApi HTTP error: {error}"}
             cached = False
+            if "hasn't returned any results" in str(data.get("error", "")):
+                data = {"search_metadata": data.get("search_metadata"), "empty": True}
             if not data.get("error"):
                 path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         self.log.append({"purpose": purpose, "engine": engine,

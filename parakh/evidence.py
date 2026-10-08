@@ -27,21 +27,30 @@ def _words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) > 2}
 
 
+def _closed(place: dict, words: str) -> bool:
+    return words in f"{place.get('open_state', '')} {place.get('hours', '')}".lower()
+
+
 def _listing(data: dict, name: str) -> dict | None:
     # The result whose name shares most words with the supplier, not simply the first pin
     wanted = _words(core_name(name))
     candidates = [data["place_results"]] if data.get("place_results") else (data.get("local_results") or [])[:6]
-    place = max(candidates, key=lambda c: len(wanted & _words(c.get("title"))), default=None)
-    if not place:
+    if not candidates:
         return None
-    hours = " ".join(str(v) for v in (place.get("operating_hours") or {}).values())
-    state = f"{place.get('open_state', '')} {hours}"
+    best = max(len(wanted & _words(c.get("title"))) for c in candidates)
+    # Listings that carry the name; a business often keeps an old, closed pin beside its current one
+    matched = [c for c in candidates if best and len(wanted & _words(c.get("title"))) >= max(1, min(best, len(wanted) - 1))]
+    open_ones = [c for c in matched if not _closed(c, "permanently closed")]
+    place = (open_ones or matched or candidates)[0]
+    old = [c for c in matched if c is not place and _closed(c, "permanently closed")]
+    state = f"{place.get('open_state', '')} {' '.join(str(v) for v in (place.get('operating_hours') or {}).values())}"
     return {"title": html.unescape(place.get("title") or ""), "address": html.unescape(place.get("address") or ""), "rating": place.get("rating"),
             "reviews": place.get("reviews"), "type": place.get("type"), "website": place.get("website"),
             "phone": place.get("phone"), "data_id": place.get("data_id"), "place_id": place.get("place_id"),
             "permanently_closed": "permanently closed" in state.lower(),
             "temporarily_closed": "temporarily closed" in state.lower(),
-            "name_matches": core_name(name).lower() in (place.get("title") or "").lower(),
+            "name_matches": bool(matched) and place in matched,
+            "older_closed": [html.unescape(f"{c.get('title')}, {c.get('address') or ''}") for c in old],
             "maps_link": f"https://www.google.com/maps/place/?q=place_id:{place['place_id']}" if place.get("place_id") else None}
 
 
@@ -84,4 +93,6 @@ def gather(vendor: dict, searches: Searches):
                       q=f'"{core}" {city} (complaint OR scam OR fraud OR cheated OR "not delivered")', num=10, **region))
 
     yield done("complaints", "Searched complaint and scam reports")
-    yield {"step": "gathered", "core_name": core, "listing": listing, "items": [i for i in items if i["title"] or i["snippet"]]}
+    # Two searches can find the same page; it is one piece of evidence
+    unique = list({i["link"] or i["id"]: i for i in items if i["title"] or i["snippet"]}.values())
+    yield {"step": "gathered", "core_name": core, "listing": listing, "items": unique}

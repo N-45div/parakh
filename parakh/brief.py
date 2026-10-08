@@ -5,6 +5,11 @@ import uuid
 RANK = {"high": 0, "medium": 1, "low": 2, "none": 3}
 SOURCE_NAMES = {"registry": "GST registry listing", "reviews": "Google Maps review", "news": "News",
                 "court": "Court record", "complaints": "Complaint or forum post"}
+GROUPS = {
+    "court_case": ("{n} court record{s} name this supplier in routine matters: cases it brought, consumer disputes or appeals.", "Court records"),
+    "customer_complaint": ("{n} ordinary customer complaint{s} mention this supplier.", "Reviews and complaint sites"),
+    "fraud_or_enforcement": ("{n} minor mention{s} in enforcement-related coverage, with nothing naming this supplier as accused.", "News"),
+}
 VERDICTS = {
     "hold": "Hold the payment until you have checked these",
     "verify": "Pay only after the checks below",
@@ -47,6 +52,8 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
             flags.append(_flag("high", "Google Maps marks this business as permanently closed.", "Google Maps", listing.get("maps_link")))
         elif listing["temporarily_closed"]:
             flags.append(_flag("medium", "Google Maps marks this business as temporarily closed.", "Google Maps", listing.get("maps_link")))
+        if listing.get("older_closed") and not listing["permanently_closed"]:
+            flags.append(_flag("low", f"An older Maps listing is marked permanently closed ({listing['older_closed'][0]}); the current one is open. Make sure your invoice shows the current address.", "Google Maps"))
         if not listing["name_matches"]:
             flags.append(_flag("low", f"The closest Maps listing is “{listing['title']}”, which may be a different business.", "Google Maps", listing.get("maps_link")))
         elif gst.get("valid") and gst.get("state") and listing.get("address") and gst["state"].lower() not in listing["address"].lower():
@@ -57,10 +64,11 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
         if j["severity"] != "low":
             flags.append(_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]))
     # Routine mentions are summarised per source instead of listed one by one
-    for source in dict.fromkeys(j["source"] for j in about if j["severity"] == "low"):
-        group = [j for j in about if j["severity"] == "low" and j["source"] == source]
-        label = SOURCE_NAMES.get(source, source)
-        flag = _flag("low", f"{len(group)} routine {label.lower()}{'s' if len(group) > 1 else ''} name this supplier (consumer disputes, ordinary complaints or cases it brought).", label)
+    for kind in dict.fromkeys(j["kind"] for j in about if j["severity"] == "low"):
+        group = [j for j in about if j["severity"] == "low" and j["kind"] == kind]
+        n = len(group)
+        text, label = GROUPS.get(kind, ("{n} other minor mention{s} of this supplier.", "Various sources"))
+        flag = _flag("low", text.format(n=n, s="s" if n > 1 else ""), label)
         flag["items"] = [{"text": j["finding"] or j["title"], "link": j["link"], "quote": j["quote"]} for j in group]
         flags.append(flag)
     clashes = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],

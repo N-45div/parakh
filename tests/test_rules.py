@@ -72,3 +72,16 @@ def test_routine_mentions_are_grouped():
     result = _build([registry, *cases])
     grouped = [f for f in result["flags"] if f.get("items")]
     assert result["verdict"] == "clear" and len(grouped) == 1 and len(grouped[0]["items"]) == 3
+
+
+def test_listing_prefers_the_open_pin_over_an_old_closed_one():
+    from parakh.evidence import _listing
+    data = {"local_results": [
+        {"title": "Ecoren Energy India Pvt Ltd", "open_state": "Permanently closed", "address": "Old office"},
+        {"title": "Ecoren Energy", "open_state": "Closes soon · 6:30 pm", "address": "Current office", "place_id": "p1"},
+        {"title": "Some Solar Shop", "open_state": "Open"}]}
+    listing = _listing(data, "Ecoren Energy India Private Limited")
+    assert listing["title"] == "Ecoren Energy" and not listing["permanently_closed"]
+    assert listing["older_closed"] == ["Ecoren Energy India Pvt Ltd, Old office"]
+    only_closed = _listing({"local_results": data["local_results"][:1]}, "Ecoren Energy India Private Limited")
+    assert only_closed["permanently_closed"]
