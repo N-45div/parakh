@@ -2,7 +2,7 @@
 import os
 from collections.abc import Iterator
 
-from . import brief, evidence, gstin, judge
+from . import brief, domain, evidence, gstin, judge
 from .search import Searches
 from .store import Store
 
@@ -18,6 +18,10 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
             gathering = event
         else:
             yield event
+    site = domain.domain_of((gathering.get("listing") or {}).get("website"))
+    if site:
+        gathering["website"] = {"domain": site, "registered": domain.registered(site)}
+        yield {"step": "website", "detail": f"{site}: registered {gathering['website']['registered'] or 'date not published'}"}
     yield {"step": "judge", "detail": f"Reading {len(gathering['items'])} public results with an open model"}
     try:
         judged, model = judge.judge(v, gathering["items"], os.environ.get("TINKER_API_KEY"))

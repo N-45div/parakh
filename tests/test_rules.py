@@ -133,3 +133,46 @@ def test_an_amalgamated_company_needs_verifying():
     merged = _judged(id="company-0", source="company", kind="company_record", severity="none", status="amalgamated", registered_on="2010-01-13")
     result = _build_on([merged], gst, date(2026, 10, 9))
     assert result["verdict"] == "verify" and "merged into another company" in result["flags"][0]["text"]
+
+
+def _build_money(judged, vendor_extra, website=None):
+    from datetime import date
+    gst = gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd")
+    gathered = {"core_name": "Acme Steel", "website": website,
+                "listing": {"title": "Acme Steel", "address": "Peenya, Bengaluru, Karnataka", "name_matches": True,
+                            "permanently_closed": False, "temporarily_closed": False, "maps_link": None}, "items": judged}
+    vendor = {"name": "Acme Steel Ltd", "city": "Bengaluru", "gstin": gst["gstin"], **vendor_extra}
+    return brief.build(vendor, gst, gathered, judged, "m", [], today=date(2026, 10, 10))
+
+
+def test_payee_name_upi_and_amount():
+    registry = _judged(id="registry-0", source="registry", kind="registry_record", severity="none", status="active", legal_name="ACME STEEL LIMITED")
+    same = _build_money([registry], {"payee": "ACME STEEL LIMITED", "amount": 185000})
+    assert same["verdict"] == "clear" and not any("does not match" in f["text"] for f in same["flags"])
+    other = _build_money([registry], {"payee": "Ramesh Kumar", "amount": 185000})
+    assert other["verdict"] == "verify" and "Ramesh Kumar" in other["flags"][0]["text"]
+    assert any("Split the ₹1,85,000" in s["text"] for s in other["next_steps"])
+    upi = _build_money([registry], {"payee": "acmesteel@okaxis", "amount": 250000})
+    assert "acmesteel@okaxis" in upi["next_steps"][0]["text"] and "ACME STEEL LIMITED" in upi["next_steps"][0]["text"]
+    assert any("₹2,50,000" in s["text"] for s in upi["next_steps"])
+
+
+def test_a_scam_report_on_the_upi_id_holds_whoever_it_names():
+    report = _judged(id="payee-0", source="payee", kind="fraud_or_enforcement", about_vendor="no", severity="high", finding="A complaint names this UPI ID")
+    held = _build_money([report], {"payee": "acmesteel@okaxis", "amount": 90000})
+    assert held["verdict"] == "hold" and held["next_steps"][0]["text"] == "Don't send the ₹90,000 yet."
+    assert not held["clashes"]
+
+
+def test_a_new_website_needs_verifying():
+    young = _build_money([], {}, website={"domain": "acme-steel.in", "registered": "2026-08-20"})
+    assert any("acme-steel.in" in f["text"] for f in young["flags"]) and young["identity"]["website"]["domain"] == "acme-steel.in"
+    old = _build_money([], {}, website={"domain": "acme.com", "registered": "2009-01-01"})
+    assert not any("acme.com" in f["text"] for f in old["flags"])
+
+
+def test_upi_ids_and_domains():
+    from parakh.domain import domain_of
+    from parakh.evidence import upi_id
+    assert upi_id(" Acme.Steel@OKAXIS ") == "acme.steel@okaxis" and upi_id("Ramesh Kumar") == "" and upi_id("a@b@c") == ""
+    assert domain_of("https://www.shop.acme.co.in/x") == "acme.co.in" and domain_of("https://acme.business.site") is None

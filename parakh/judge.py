@@ -31,7 +31,7 @@ For every result return:
 - status and legal_name: for registry_record results, the status and legal name the text gives for the supplier's own GSTIN ("active", "cancelled", "suspended" or "inactive"); for company_record results, the company's status ("active", "strike_off", "under_liquidation", "dormant" or "amalgamated") and registered name. Else "".
 - registered_on: for registry_record and company_record results, the GST registration or incorporation date the text gives, as YYYY-MM-DD (or YYYY-MM or YYYY when that is all it says), else "".
 - cin: for company_record results, the CIN or LLPIN if the text shows it, else "".
-- A phone-number result is about the supplier only if the page ties that number to this business.
+- A phone-number or UPI-ID result is about the supplier only if the page ties that number or ID to this business. A page that reports the number or UPI ID in a scam, fraud or non-delivery complaint is kind fraud_or_enforcement or customer_complaint with severity high, whoever it names, because that is where the money would go.
 
 Reply with JSON only: {"results": [{"id": ..., "about_vendor": ..., "kind": ..., "role": ..., "severity": ..., "finding": ..., "quote": ..., "status": ..., "legal_name": ..., "registered_on": ..., "cin": ...}]}, one entry for every id."""
 
@@ -62,7 +62,7 @@ def judge(vendor: dict, items: list[dict], api_key: str | None) -> tuple[list[di
         return [], "none"
     if not api_key:
         return [{**i, **fallback(i, vendor)} for i in items], "keywords (no model key)"
-    supplier = {k: vendor.get(k) for k in ("name", "city", "gstin", "phone") if vendor.get(k)}
+    supplier = {k: vendor.get(k) for k in ("name", "city", "gstin", "phone", "payee") if vendor.get(k)}
     results = [{"id": i["id"], "source": i["source"], "publisher": i.get("publisher"), "date": i.get("date"),
                 "title": i["title"][:300], "text": i["snippet"][:600]} for i in items]
     def ask(batch):

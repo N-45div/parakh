@@ -82,6 +82,10 @@ def gather(vendor: dict, searches: Searches):
         variants = dict.fromkeys([typed, phone, spaced, f"+91 {spaced}", f"0{phone}"] if not phone.startswith(("6", "7", "8", "9"))
                                  else [phone, spaced, f"+91 {spaced}", f"+91{phone}", typed])
         plan["phone"] = ("Phone number reports", "google", {"q": " OR ".join(f'"{v}"' for v in variants), "num": 10, **region})
+    upi = upi_id(vendor.get("payee"))
+    if upi:
+        # Scam reports often name the UPI ID money was sent to
+        plan["payee"] = ("UPI ID reports", "google", {"q": f'"{upi}"', "num": 10, **region})
     results, listing = {}, None
     with ThreadPoolExecutor(max_workers=6) as pool:
         running = {pool.submit(searches.run, purpose, engine, **params): step for step, (purpose, engine, params) in plan.items()}
@@ -111,6 +115,7 @@ def gather(vendor: dict, searches: Searches):
               for i, n in enumerate((results["news"].get("news_results") or [])[:8]) if n.get("link")]
     items += _organic("court", results["court"]) + _organic("complaints", results["complaints"])
     items += _organic("company", results.get("company", {})) + _organic("phone", results.get("phone", {}))
+    items += _organic("payee", results.get("payee", {}))
     # Two searches can find the same page; it is one piece of evidence
     unique = list({i["link"] or i["id"]: i for i in items if i["title"] or i["snippet"]}.values())
     yield {"step": "gathered", "core_name": core, "listing": listing, "items": unique}
@@ -124,7 +129,16 @@ DETAILS = {
     "complaints": lambda listing: "Searched complaint and scam reports",
     "company": lambda listing: "Searched company registry listings for MCA status",
     "phone": lambda listing: "Searched reports about the phone number",
+    "payee": lambda listing: "Searched reports about the UPI ID",
 }
+UPI = re.compile(r"^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$")
+
+
+def upi_id(payee: str | None) -> str:
+    candidate = re.sub(r"\s", "", payee or "").lower()
+    return candidate if UPI.match(candidate) else ""
+
+
 COMPANY = re.compile(r"\b(pvt|private|ltd|limited|llp)\b", re.I)
 # Public mirrors of the MCA register whose snippets carry the CIN, status and incorporation date
 COMPANY_SITES = ("zaubacorp.com", "tofler.in", "thecompanycheck.com", "instafinancials.com", "falconebiz.com")

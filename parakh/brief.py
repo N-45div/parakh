@@ -1,12 +1,17 @@
 """Fixed rules turn the GSTIN check, the Maps listing and the labelled results into a brief. No model decides the verdict."""
+import re
 import time
 import uuid
 from datetime import date
 
+from .evidence import upi_id
+
+NOISE = re.compile(r"\b(m/?s|messrs|pvt|private|ltd|limited|llp|the|and|co)\b|[^a-z0-9 ]")
+
 RANK = {"high": 0, "medium": 1, "low": 2, "none": 3}
 SOURCE_NAMES = {"registry": "GST registry listing", "reviews": "Google Maps review", "news": "News",
                 "court": "Court record", "complaints": "Complaint or forum post", "company": "Company registry listing",
-                "phone": "Report about the phone number"}
+                "phone": "Report about the phone number", "payee": "Report about the UPI ID"}
 GROUPS = {
     "court_case": ("{n} court record{s} name this supplier in routine matters: cases it brought, consumer disputes or appeals.", "Court records"),
     "customer_complaint": ("{n} ordinary customer complaint{s} mention this supplier.", "Reviews and complaint sites"),
@@ -21,6 +26,25 @@ VERDICTS = {
 
 def _flag(severity, text, source, link=None, quote="", date=None, publisher=None):
     return {"severity": severity, "text": text, "source": source, "link": link, "quote": quote, "date": date, "publisher": publisher}
+
+
+def inr(amount: int) -> str:
+    """Rupees with Indian digit grouping: 185000 -> Rs 1,85,000."""
+    digits = str(int(amount))
+    head, tail = digits[:-3], digits[-3:]
+    groups = []
+    while len(head) > 2:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    return "₹" + ",".join(([head] if head else []) + groups + [tail])
+
+
+def name_match(payee: str, names: list[str]) -> float:
+    """Share of the shorter name's words found in the other, ignoring legal noise (M/s, Pvt, Ltd, Co)."""
+    def words(text):
+        return {w for w in NOISE.sub(" ", text.lower()).split() if len(w) > 1}
+    mine = words(payee)
+    return max((len(mine & words(n)) / max(1, min(len(mine), len(words(n)))) for n in names if n and words(n)), default=0.0)
 
 
 def _age_days(when: str, today: date) -> int | None:
@@ -99,6 +123,26 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
         elif gst.get("valid") and gst.get("state") and listing.get("address") and gst["state"].lower() not in listing["address"].lower():
             flags.append(_flag("medium", f"The GSTIN is registered in {gst['state']}, but the Maps listing is at {listing['address']}. A branch is possible; ask which registration will invoice you.", "GSTIN + Google Maps", listing.get("maps_link")))
 
+    website = gathered.get("website")
+    identity["website"] = website
+    age = _age_days((website or {}).get("registered") or "", today)
+    if age is not None and 0 <= age < 183:
+        flags.append(_flag("medium", f"The supplier's website ({website['domain']}) was registered on {website['registered']}, under six months ago. New sites are common in supplier scams.",
+                           "Domain registration (RDAP)", f"https://rdap.org/domain/{website['domain']}"))
+
+    # Where the money goes: a scam report that cites the UPI ID or number matters whoever it names
+    money = [j for j in judged if j["source"] in ("payee", "phone") and j["kind"] in ("fraud_or_enforcement", "customer_complaint")
+             and j["severity"] in ("high", "medium")]
+    for j in money:
+        flags.append(_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]))
+    payee = (vendor.get("payee") or "").strip()
+    if payee and "@" not in payee:
+        names = [vendor["name"], *identity["registry"]["legal_names"], *((identity.get("company") or {}).get("names") or [])]
+        if name_match(payee, names) < 0.6:
+            flags.append(_flag("medium", f"You are asked to pay “{payee}”, which does not match the supplier's name ({vendor['name']}). Payments diverted to someone else's account are a common fraud: pay only into an account in the supplier's legal name, or get the change confirmed on a number you already know.",
+                               "Payee check"))
+    judged = [j for j in judged if j not in money]
+
     about = [j for j in judged if j["about_vendor"] == "yes" and j["severity"] != "none" and j["kind"] not in ("registry_record", "company_record")]
     for j in about:
         if j["severity"] != "low":
@@ -129,8 +173,16 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     steps.append({"text": "Ask for a cancelled cheque or bank letter in the same legal name as the invoice before you pay.", "link": None})
     if clashes:
         steps.append({"text": f"Rule out the {len(clashes)} result{'s' if len(clashes) > 1 else ''} below about a business with a similar name.", "link": None})
-    if verdict != "clear":
-        steps.append({"text": "Keep any advance small, or pay against delivery, until the flags are resolved.", "link": None})
+    upi, amount = upi_id(payee), vendor.get("amount") or 0
+    if upi:
+        steps.insert(0, {"text": f"When you enter {upi} in your UPI app, check the name it shows is {next(iter(identity['registry']['legal_names']), vendor['name'])}. Don't pay if it isn't.", "link": None})
+    if verdict == "hold":
+        steps.insert(0, {"text": f"Don't send the {inr(amount)} yet." if amount else "Don't send an advance yet.", "link": None})
+    elif verdict == "verify":
+        steps.append({"text": f"Split the {inr(amount)}: a small first payment against the first delivery, the rest after." if amount
+                      else "Keep any advance small, or pay against delivery, until the flags are resolved.", "link": None})
+    elif amount >= 200000:
+        steps.append({"text": f"For {inr(amount)}, confirm the bank details by calling the supplier on a number you already know. Invoice-redirect fraud targets large payments.", "link": None})
 
     by_source = {}
     for j in judged:
