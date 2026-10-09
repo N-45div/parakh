@@ -24,6 +24,8 @@ EXAMPLES = [
     ({"name": "Tata Motors Limited", "city": "Bengaluru", "gstin": "29AAACT2727Q1ZS"}, "a large, established supplier"),
     ({"name": "Tata Motors Limited", "city": "Bengaluru", "gstin": "29AAACT2727Q1ZT"}, "one wrong character in the GSTIN"),
     ({"name": "Sri Balaji Traders", "city": "Bengaluru", "gstin": ""}, "a very common business name"),
+    ({"name": "SHREE VINAYAKA CORRUGATORS", "city": "Bengaluru", "gstin": "29ABKFS4821L1ZM", "payee": "R MANJUNATH", "amount": 92500},
+     "fictional quote: bank account in another name"),
 ]
 
 store = Store()
