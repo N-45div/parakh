@@ -56,7 +56,9 @@ function show(b) {
   const c = b.identity.company;
   const companyRows = c ? `<dt>Company record</dt><dd>${c.status ? `<span class="pill ${c.status}">${esc(STATUS[c.status] || c.status)}</span> ` : ""}${c.sources.slice(0, 2).map((s) => link(s.link, "source")).join(" ")}
       ${c.incorporated ? `<br>Incorporated ${esc(c.incorporated)}` : ""}${c.cin ? `<br><span class="mono">${esc(c.cin)}</span>` : ""}</dd>` : "";
-  const mapRows = l ? `<dt>Google Maps</dt><dd>${esc(l.title)}<br><small>${esc(l.address || "")}</small><br>
+  // The closest pin is shown for checking, but labelled when it does not carry the supplier's name
+  const other = l && l.name_matches === false ? `<span class="pill elsewhere">No listing under this name</span><br><small>Closest match, a different business:</small><br>` : "";
+  const mapRows = l ? `<dt>Google Maps</dt><dd>${other}${esc(l.title)}<br><small>${esc(l.address || "")}</small><br>
       ${l.rating ? `${l.rating}★ from ${l.reviews} reviews · ` : ""}${esc(l.type || "")} ${link(l.maps_link, "Open in Maps ↗")}</dd>` : `<dt>Google Maps</dt><dd>No listing found</dd>`;
   const w = b.identity.website;
   const siteRows = w ? `<dt>Website</dt><dd>${link("https://" + w.domain, esc(w.domain))}<br><small>${w.registered ? "Domain registered " + esc(w.registered) : "Registration date not published"}</small></dd>` : "";
