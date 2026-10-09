@@ -5,3 +5,5 @@ python-dotenv>=1.0
 serpapi>=0.1.5
 pytest>=8
 psycopg[binary]>=3.2
+pypdf>=4.0
+python-multipart>=0.0.9
