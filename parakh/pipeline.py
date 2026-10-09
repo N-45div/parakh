@@ -26,7 +26,7 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
         yield {"step": "website", "detail": f"{site}: registered {gathering['website']['registered'] or 'date not published'}"}
     yield {"step": "judge", "detail": f"Reading {len(gathering['items'])} public results with an open model"}
     try:
-        judged, model = judge.judge(v, gathering["items"], os.environ.get("TINKER_API_KEY"))
+        judged, model = judge.judge(v, gathering["items"], os.environ.get("TINKER_API_KEY"), store)
     except Exception as error:  # the brief still works on keyword labels
         judged, model = [{**i, **judge.fallback(i, v)} for i in gathering["items"]], f"keywords (model unavailable: {type(error).__name__})"
     result = brief.build(v, gst, gathering, judged, model, searches.log)

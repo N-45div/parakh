@@ -4,6 +4,7 @@ Qwen3.6-27B runs on Thinking Machines' Tinker through its OpenAI-compatible endp
 verdict: it labels each result, and brief.py applies fixed rules to those labels. A quote the model claims is only kept
 if it really appears in the result's text.
 """
+import hashlib
 import json
 import os
 import re
@@ -57,7 +58,7 @@ def fallback(item: dict, vendor: dict) -> dict:
             "registered_on": "", "cin": ""}
 
 
-def judge(vendor: dict, items: list[dict], api_key: str | None) -> tuple[list[dict], str]:
+def judge(vendor: dict, items: list[dict], api_key: str | None, store=None) -> tuple[list[dict], str]:
     if not items:
         return [], "none"
     if not api_key:
@@ -66,13 +67,21 @@ def judge(vendor: dict, items: list[dict], api_key: str | None) -> tuple[list[di
     results = [{"id": i["id"], "source": i["source"], "publisher": i.get("publisher"), "date": i.get("date"),
                 "title": i["title"][:300], "text": i["snippet"][:600]} for i in items]
     def ask(batch):
+        question = json.dumps({"supplier": supplier, "results": batch}, ensure_ascii=False)
+        # The same results for the same supplier get the same labels, so a repeat check skips the model
+        key = "judge-" + hashlib.sha1(f"{MODEL}\n{SYSTEM}\n{question}".encode()).hexdigest()[:20]
+        hit = store.cached(key) if store is not None else None
+        if hit:
+            return hit["results"]
         response = httpx.post(f"{ENDPOINT}/chat/completions", timeout=90, headers={"Authorization": f"Bearer {api_key}"}, json={
             "model": MODEL, "temperature": 0, "max_tokens": 1800, "reasoning_effort": False,
-            "messages": [{"role": "system", "content": SYSTEM},
-                         {"role": "user", "content": json.dumps({"supplier": supplier, "results": batch}, ensure_ascii=False)}]})
+            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}]})
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
-        return json.loads(re.search(r"\{.*\}", content, re.S).group(0)).get("results", [])
+        answer = json.loads(re.search(r"\{.*\}", content, re.S).group(0)).get("results", [])
+        if store is not None:
+            store.remember(key, {"results": answer})
+        return answer
 
     # Small batches in parallel: the same labels, a fraction of the wait
     batches = [results[i:i + BATCH] for i in range(0, len(results), BATCH)]

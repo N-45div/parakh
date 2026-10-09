@@ -185,3 +185,27 @@ def test_a_shared_name_prefix_is_not_the_same_business():
     assert other["name_matches"] is False
     same = _listing({"local_results": [{"title": "Sri Balaji Traders - Wholesale Dealers in Hardware Items"}]}, "Sri Balaji Traders")
     assert same["name_matches"] is True
+
+
+def test_a_repeat_check_reuses_the_models_labels(monkeypatch):
+    from parakh import judge
+
+    class Memory(dict):
+        cached, remember = dict.get, dict.__setitem__
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": '{"results": [{"id": "news-0", "about_vendor": "yes", "kind": "neutral"}]}'}}]}
+
+    calls = []
+    monkeypatch.setattr(judge.httpx, "post", lambda *a, **k: calls.append(1) or Reply())
+    item = {"id": "news-0", "source": "news", "title": "Acme Steel opens a plant", "snippet": "", "link": None}
+    store = Memory()
+    first, _ = judge.judge({"name": "Acme Steel", "city": "Pune"}, [item], "key", store)
+    again, _ = judge.judge({"name": "Acme Steel", "city": "Pune"}, [item], "key", store)
+    assert len(calls) == 1 and first == again and first[0]["about_vendor"] == "yes"
+    judge.judge({"name": "Acme Steels", "city": "Pune"}, [item], "key", store)
+    assert len(calls) == 2  # a different supplier is a different question
