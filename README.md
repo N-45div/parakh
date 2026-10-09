@@ -15,12 +15,16 @@ Parakh does that in about a minute and writes a brief:
 - **Namesakes kept apart:** results that may be about a different business with a similar name are listed separately and never trigger a hold.
 - **What to do before paying:** the GST portal, the MCA portal, a cancelled cheque in the same legal name, a smaller advance.
 - **Young registrations flagged:** a GSTIN registered under six months ago, or a company incorporated under a year ago, is a common pattern in fake-invoice rackets.
+- **Who the money goes to:** a payee name that doesn't match the supplier is flagged (diverted-payment fraud); a UPI ID is searched for scam reports, and you're told to check the name your UPI app shows.
+- **How much is at stake:** the advice scales with the amount: hold it, split it, or confirm bank details by phone for large payments.
+- **Website age:** the supplier's domain registration date from RDAP; a site under six months old needs verifying.
+- **Drop a quote or invoice PDF:** the open model fills in the seller's name, city, GSTIN, phone, payee and amount (the buyer's GSTIN on the same page is ignored). Nothing is stored.
 - **Shareable:** *Copy for WhatsApp* writes a plain-text summary for a partner or accountant; *Copy link* opens the same brief.
 - **What the check cannot tell you**, stated plainly.
 
 ## How SerpApi is used
 
-Each check runs six to eight of these searches, in parallel, through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
+Each check runs six to nine of these searches, in parallel, through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
 
 | Search | SerpApi engine | Why |
 | --- | --- | --- |
@@ -32,6 +36,7 @@ Each check runs six to eight of these searches, in parallel, through the officia
 | Name + city + complaint, scam, cheated… | Google Search | Complaint sites and forums |
 | Name on Zauba, Tofler and other MCA mirrors (companies and LLPs) | Google Search | Company status (active, struck off, in liquidation, amalgamated), incorporation date, CIN |
 | The supplier's phone or WhatsApp number (optional) | Google Search | Scam and complaint reports that cite the number |
+| The UPI ID you're asked to pay (optional) | Google Search | Scam reports that name the UPI ID, whoever they name |
 
 Every call is cached on disk by its parameters, so repeating a check costs no credits, and every brief lists the searches behind it.
 
