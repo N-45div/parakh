@@ -38,9 +38,13 @@ def _listing(data: dict, name: str) -> dict | None:
     candidates = [data["place_results"]] if data.get("place_results") else (data.get("local_results") or [])[:6]
     if not candidates:
         return None
-    best = max(len(wanted & _words(c.get("title"))) for c in candidates)
-    # Listings that carry the name; a business often keeps an old, closed pin beside its current one
-    matched = [c for c in candidates if best and len(wanted & _words(c.get("title"))) >= max(1, min(best, len(wanted) - 1))]
+    # A listing is this business only if it carries every distinctive word of the name ("Sri Balaji Traders - Wholesale
+    # Dealers") or is a shorter form made only of them ("Ecoren Energy"). Sharing a common prefix is not enough:
+    # "Shree Vinayaka Packaging" is not "Shree Vinayaka Corrugators". A business often keeps an old, closed pin too.
+    def carries_name(c):
+        title = _words(c.get("title"))
+        return bool(wanted) and (wanted <= title or (len(title) >= 2 and title <= wanted))
+    matched = [c for c in candidates if carries_name(c)]
     open_ones = [c for c in matched if not _closed(c, "permanently closed")]
     place = (open_ones or matched or candidates)[0]
     old = [c for c in matched if c is not place and _closed(c, "permanently closed")]
@@ -98,7 +102,7 @@ def gather(vendor: dict, searches: Searches):
                     listing = _listing(results[step], name)
                     detail = f"Google Maps: {listing['title']}" if listing else "Google Maps: no listing found"
                     # The reviews lookup needs the listing's Maps ID, so it starts as soon as the listing lands
-                    if listing and listing.get("data_id") and (listing.get("reviews") or 0) > 0:
+                    if listing and listing["name_matches"] and listing.get("data_id") and (listing.get("reviews") or 0) > 0:
                         plan["reviews"] = ("Lowest-rated reviews", "google_maps_reviews", {})
                         running[pool.submit(searches.run, "Lowest-rated reviews", "google_maps_reviews", shown=f"reviews of {listing['title']}",
                                             data_id=listing["data_id"], sort_by="ratingLow", hl="en")] = "reviews"

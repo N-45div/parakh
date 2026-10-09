@@ -176,3 +176,11 @@ def test_upi_ids_and_domains():
     from parakh.evidence import upi_id
     assert upi_id(" Acme.Steel@OKAXIS ") == "acme.steel@okaxis" and upi_id("Ramesh Kumar") == "" and upi_id("a@b@c") == ""
     assert domain_of("https://www.shop.acme.co.in/x") == "acme.co.in" and domain_of("https://acme.business.site") is None
+
+
+def test_a_shared_name_prefix_is_not_the_same_business():
+    from parakh.evidence import _listing
+    other = _listing({"local_results": [{"title": "Shree Vinayaka Packaging", "website": "https://shreevinayakapackaging.com"}]}, "Shree Vinayaka Corrugators")
+    assert other["name_matches"] is False
+    same = _listing({"local_results": [{"title": "Sri Balaji Traders - Wholesale Dealers in Hardware Items"}]}, "Sri Balaji Traders")
+    assert same["name_matches"] is True

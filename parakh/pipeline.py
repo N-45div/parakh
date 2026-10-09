@@ -18,7 +18,9 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
             gathering = event
         else:
             yield event
-    site = domain.domain_of((gathering.get("listing") or {}).get("website"))
+    # A website is the supplier's only when the Maps listing it came from is really this business
+    listing = gathering.get("listing") or {}
+    site = domain.domain_of(listing.get("website")) if listing.get("name_matches") else None
     if site:
         gathering["website"] = {"domain": site, "registered": domain.registered(site)}
         yield {"step": "website", "detail": f"{site}: registered {gathering['website']['registered'] or 'date not published'}"}
