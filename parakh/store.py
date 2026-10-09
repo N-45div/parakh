@@ -5,10 +5,12 @@ the same six operations.
 """
 import hashlib
 import json
+import re
 import os
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = """
@@ -108,9 +110,41 @@ class LocalStore:
             return self.counters[key] <= limit
 
 
+class NeonHttpStore(PostgresStore):
+    """The same tables through Neon's HTTPS SQL endpoint, for machines where the native driver cannot load."""
+
+    def __init__(self, url: str):
+        super().__init__(url)
+        import httpx
+        self.http = httpx.Client(base_url=f"https://{urlparse(url).hostname}", headers={"Neon-Connection-String": url}, timeout=20)
+        self.ready = False
+
+    def _post(self, sql: str, params: tuple = ()):
+        numbered = iter(range(1, len(params) + 1))
+        query = re.sub(r"%s", lambda _: f"${next(numbered)}", sql)
+        values = [json.dumps(p, ensure_ascii=False) if isinstance(p, dict) else p for p in params]
+        response = self.http.post("/sql", json={"query": query, "params": values})
+        response.raise_for_status()
+        return [list(row.values()) for row in response.json().get("rows", [])]
+
+    def _run(self, sql: str, params: tuple = (), fetch: bool = False):
+        if not self.ready:
+            for statement in filter(str.strip, SCHEMA.split(";")):
+                self._post(statement)
+            self.ready = True
+        rows = self._post(sql, params)
+        return rows if fetch else None
+
+
 def Store():
     url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
-    return PostgresStore(url) if url else LocalStore()
+    if not url:
+        return LocalStore()
+    try:
+        import psycopg  # noqa: F401  (fails when no libpq can load)
+        return PostgresStore(url)
+    except ImportError:
+        return NeonHttpStore(url)
 
 
 def visitor(ip: str) -> str:
