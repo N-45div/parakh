@@ -90,7 +90,8 @@ def test_listing_prefers_the_open_pin_over_an_old_closed_one():
 def test_app_imports_and_serves_examples(tmp_path, monkeypatch):
     monkeypatch.setenv("PARAKH_CHECKS", str(tmp_path / "checks"))
     monkeypatch.setenv("PARAKH_CACHE", str(tmp_path / "cache"))
-    monkeypatch.delenv("MONGODB_URI", raising=False)
+    for name in ("DATABASE_URL", "POSTGRES_URL", "MONGODB_URI"):
+        monkeypatch.delenv(name, raising=False)
     import importlib
     from fastapi.testclient import TestClient
     import parakh.app
