@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", judge: "Open model" };
+const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", payee: "UPI ID", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", website: "Website age", judge: "Open model" };
+const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const STATUS = { strike_off: "struck off", under_liquidation: "under liquidation" };
 const ENGINE = { google: "Google Search", google_maps: "Google Maps", google_maps_reviews: "Google Maps Reviews", google_news: "Google News" };
 const VERDICT = { hold: "Hold", verify: "Verify first", clear: "No red flags" };
@@ -57,13 +58,16 @@ function show(b) {
       ${c.incorporated ? `<br>Incorporated ${esc(c.incorporated)}` : ""}${c.cin ? `<br><span class="mono">${esc(c.cin)}</span>` : ""}</dd>` : "";
   const mapRows = l ? `<dt>Google Maps</dt><dd>${esc(l.title)}<br><small>${esc(l.address || "")}</small><br>
       ${l.rating ? `${l.rating}★ from ${l.reviews} reviews · ` : ""}${esc(l.type || "")} ${link(l.maps_link, "Open in Maps ↗")}</dd>` : `<dt>Google Maps</dt><dd>No listing found</dd>`;
+  const w = b.identity.website;
+  const siteRows = w ? `<dt>Website</dt><dd>${link("https://" + w.domain, esc(w.domain))}<br><small>${w.registered ? "Domain registered " + esc(w.registered) : "Registration date not published"}</small></dd>` : "";
+  const payRows = b.vendor.payee || b.vendor.amount ? `<dt>Pay to</dt><dd>${esc(b.vendor.payee || "Not given")}${b.vendor.amount ? `<br><small>${rupees(b.vendor.amount)} about to be paid</small>` : ""}</dd>` : "";
   const reads = Object.entries(b.read).map(([k, v]) => `${STEPS[k] || k}: ${v.read} read, ${v.about_vendor} about this supplier`).join(" · ");
   $("#brief").innerHTML = `
     <div class="verdict ${b.verdict}"><span class="label">${VERDICT[b.verdict]}</span><h2>${esc(b.headline)}</h2>
-      <p>${esc(b.vendor.name)} · ${esc(b.vendor.city)}${b.vendor.gstin ? " · " + esc(b.vendor.gstin) : ""}</p>
+      <p>${esc(b.vendor.name)} · ${esc(b.vendor.city)}${b.vendor.gstin ? " · " + esc(b.vendor.gstin) : ""}${b.vendor.amount ? ` · <b>${rupees(b.vendor.amount)} at stake</b>` : ""}</p>
       <div class="actions"><button onclick="copyText()">Copy for WhatsApp</button><button onclick="copyLink()">Copy link</button><button onclick="window.print()">Save as PDF</button></div></div>
     <div class="grid">
-      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${companyRows}${mapRows}</dl></section>
+      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${companyRows}${mapRows}${siteRows}${payRows}</dl></section>
       <section class="panel"><h3>Before you pay</h3><ol class="steps">${b.next_steps.map((s) => `<li>${esc(s.text)} ${link(s.link, "Open ↗")}</li>`).join("")}</ol></section>
     </div>
     <section class="panel"><h3>What the public record shows <small>${b.flags.length ? b.flags.length + " finding" + (b.flags.length > 1 ? "s" : "") : ""}</small></h3>
@@ -100,6 +104,8 @@ function toast(text) { const t = document.createElement("div"); t.className = "t
 $("#form").onsubmit = async (event) => {
   event.preventDefault();
   const body = Object.fromEntries(new FormData(event.target));
+  const amount = String(body.amount || "").replace(/[^\d]/g, "");
+  body.amount = amount ? Number(amount) : null;
   $("#go").disabled = true; $("#go").textContent = "Checking…";
   $("#empty").hidden = true; $("#brief").hidden = true;
   $("#progress").innerHTML = ""; $("#progress").hidden = false;
@@ -124,6 +130,30 @@ $("#form").onsubmit = async (event) => {
     $("#go").disabled = false; $("#go").textContent = "Check this supplier";
   }
 };
+
+// A quote or invoice PDF fills the form; the person still reviews it before checking
+async function readPdf(file) {
+  if (!file) return;
+  $("#drop").classList.add("busy"); $("#drop").querySelector("span").textContent = `Reading ${file.name}…`;
+  try {
+    const form = new FormData(); form.append("file", file);
+    const response = await fetch("/api/extract", { method: "POST", body: form });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not read that PDF.");
+    for (const key of ["name", "city", "gstin", "phone", "payee"]) if (data[key]) $(`#form [name=${key}]`).value = data[key];
+    if (data.amount) $("#form [name=amount]").value = data.amount;
+    const extra = data.gstins_found.length > 1 && !data.gstin ? ` It lists ${data.gstins_found.length} GSTINs; pick the supplier's.` : "";
+    $("#drop").querySelector("span").textContent = `Filled from ${file.name}. Check the fields, then run the check.${extra}`;
+  } catch (error) {
+    $("#drop").querySelector("span").textContent = error.message;
+  } finally {
+    $("#drop").classList.remove("busy");
+  }
+}
+$("#pdf").onchange = (e) => readPdf(e.target.files[0]);
+$("#drop").ondragover = (e) => { e.preventDefault(); $("#drop").classList.add("over"); };
+$("#drop").ondragleave = () => $("#drop").classList.remove("over");
+$("#drop").ondrop = (e) => { e.preventDefault(); $("#drop").classList.remove("over"); readPdf(e.dataTransfer.files[0]); };
 
 status(); recent();
 const shared = new URLSearchParams(location.search).get("check");
