@@ -16,15 +16,16 @@ Parakh does that in about a minute and writes a brief:
 - **What to do before paying:** the GST portal, the MCA portal, a cancelled cheque in the same legal name, a smaller advance.
 - **Young registrations flagged:** a GSTIN registered under six months ago, or a company incorporated under a year ago, is a common pattern in fake-invoice rackets.
 - **Who the money goes to:** a payee name that doesn't match the supplier is flagged (diverted-payment fraud); a UPI ID is searched for scam reports, and you're told to check the name your UPI app shows.
+- **Which branch holds the account:** the IFSC is looked up in the RBI's branch directory. An account in another state from the supplier's GST registration, or at a different branch from the one the quote itself names, is flagged, and the account number is searched for scam reports. Two separate signs that the money would not reach the supplier make a *Hold*.
 - **How much is at stake:** the advice scales with the amount: hold it, split it, or confirm bank details by phone for large payments.
 - **Website age:** the supplier's domain registration date from RDAP; a site under six months old needs verifying.
-- **Drop a quote or invoice PDF:** the open model fills in the seller's name, city, GSTIN, phone, payee and amount (the buyer's GSTIN on the same page is ignored). Nothing is stored.
+- **Drop a quote or invoice PDF:** the open model fills in the seller's name, city, GSTIN, phone, payee, amount and bank details (the buyer's GSTIN on the same page is ignored; an account number or IFSC is kept only if it really appears in the document). Nothing is stored.
 - **Shareable:** *Copy for WhatsApp* writes a plain-text summary for a partner or accountant; *Copy link* opens the same brief.
 - **What the check cannot tell you**, stated plainly.
 
 ## How SerpApi is used
 
-Each check runs six to nine of these searches, in parallel, through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
+Each check runs six to ten of these searches, in parallel, through the official [`serpapi`](https://pypi.org/project/serpapi/) Python client. Without them there is nothing to check.
 
 | Search | SerpApi engine | Why |
 | --- | --- | --- |
@@ -37,6 +38,9 @@ Each check runs six to nine of these searches, in parallel, through the official
 | Name on Zauba, Tofler and other MCA mirrors (companies and LLPs) | Google Search | Company status (active, struck off, in liquidation, amalgamated), incorporation date, CIN |
 | The supplier's phone or WhatsApp number (optional) | Google Search | Scam and complaint reports that cite the number |
 | The UPI ID you're asked to pay (optional) | Google Search | Scam reports that name the UPI ID, whoever they name |
+| The bank account number you're asked to pay (optional) | Google Search | Complaint and cybercrime posts that cite the account |
+
+The IFSC lookup is not a search: it reads the RBI's branch list as published by Razorpay at `ifsc.razorpay.com`, with no key, and is cached like the searches.
 
 Every call is cached on disk by its parameters, so repeating a check costs no credits, and every brief lists the searches behind it.
 
