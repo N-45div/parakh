@@ -1,6 +1,6 @@
 """Copy the local search cache into the configured store and save the shared example briefs.
 
-  MONGODB_URI=... python scripts/seed_examples.py
+  DATABASE_URL=... python scripts/seed_examples.py
 
 Every example runs through the same pipeline as a visitor's check; with the cache copied first, it spends no
 SerpApi credits.
@@ -24,15 +24,18 @@ EXAMPLES = [
     ({"name": "Tata Motors Limited", "city": "Bengaluru", "gstin": "29AAACT2727Q1ZS"}, "a large, established supplier"),
     ({"name": "Tata Motors Limited", "city": "Bengaluru", "gstin": "29AAACT2727Q1ZT"}, "one wrong character in the GSTIN"),
     ({"name": "Sri Balaji Traders", "city": "Bengaluru", "gstin": ""}, "a very common business name"),
-    ({"name": "SHREE VINAYAKA CORRUGATORS", "city": "Bengaluru", "gstin": "29ABKFS4821L1ZM", "payee": "R MANJUNATH", "amount": 92500},
-     "fictional quote: bank account in another name"),
+    ({"name": "SHREE VINAYAKA CORRUGATORS", "city": "Bengaluru", "gstin": "29ABKFS4821L1ZM", "payee": "R MANJUNATH", "amount": 92500,
+      "account": "38291047664417", "ifsc": "SBIN0000011", "bank": "State Bank of India, Peenya Branch"},
+     "fictional quote: account in another name, at a branch in another state"),
 ]
 
 store = Store()
 copied = 0
 for path in sorted((ROOT / "cache").glob("*.json")):
     if store.cached(path.stem) is None:
-        store.remember(path.stem, slim(json.loads(path.read_text(encoding="utf-8"))))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        # Model labels and IFSC lookups are stored as they are; only search responses are slimmed
+        store.remember(path.stem, data if path.stem.startswith(("judge-", "ifsc-")) else slim(data))
         copied += 1
 print(f"copied {copied} cached searches")
 for vendor, note in EXAMPLES:
