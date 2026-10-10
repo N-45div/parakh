@@ -202,9 +202,15 @@ def test_the_ifsc_says_where_the_account_is():
     checked = {"ifsc": "SBIN0000011", "valid_format": True, "branch": ASANSOL, "claimed": "State Bank of India, Peenya Branch"}
     far = _build_money([], {"payee": "Acme Steel Ltd", "account": "38291047664417", "ifsc": "SBIN0000011"}, bank=checked)
     texts = [f["text"] for f in far["flags"]]
-    assert far["verdict"] == "verify" and far["identity"]["bank"]["branch"]["branch"] == "ASANSOL"
+    assert far["identity"]["bank"]["branch"]["branch"] == "ASANSOL"
     assert any("Peenya Branch" in t and "Asansol branch" in t for t in texts)
     assert any("West Bengal" in t and "Karnataka" in t for t in texts)
+    # Two signs that the money goes elsewhere make a hold; the payee check adds a third
+    assert far["verdict"] == "hold" and far["flags"][0]["text"].startswith("2 separate signs")
+    diverted = _build_money([], {"payee": "Ramesh Kumar", "amount": 92500}, bank=checked)
+    assert diverted["flags"][0]["text"].startswith("3 separate signs") and diverted["next_steps"][0]["text"] == "Don't send the ₹92,500 yet."
+    one = _build_money([], {"payee": "Ramesh Kumar"})
+    assert one["verdict"] == "verify"
     assert any("beneficiary name" in s["text"] for s in far["next_steps"])
     local = {**ASANSOL, "branch": "PEENYA", "state": "KARNATAKA", "address": "PEENYA INDUSTRIAL AREA, BENGALURU"}
     near = _build_money([], {"payee": "Acme Steel Ltd"}, bank={**checked, "branch": local, "claimed": "SBI Peenya"})

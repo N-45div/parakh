@@ -135,6 +135,7 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     # Which branch holds the account: one in another state, or not the branch the quote itself names, is how a diverted payment looks
     checked = gathered.get("bank")
     identity["bank"] = checked
+    diverted = []  # separate signs that the money would reach someone other than the supplier
     if checked:
         found, code = checked.get("branch"), checked["ifsc"]
         if not checked["valid_format"]:
@@ -147,9 +148,11 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
             if checked.get("claimed") and bank.names_branch(checked["claimed"], found) is False:
                 flags.append(_flag("medium", f"The quote names “{checked['claimed']}”, but IFSC {code} belongs to {where}. Bank details that contradict themselves suggest the quote was altered; confirm them on a number you already know.",
                                    "RBI IFSC directory", link))
+                diverted.append("the quote's bank branch doesn't match its own IFSC")
             if gst.get("valid") and gst.get("state") and found["state"] and not bank.same_state(gst["state"], found["state"]):
                 flags.append(_flag("medium", f"The account is at {where}, but the supplier's GST registration is in {gst['state']}. An account far from the supplier is common in diverted-payment fraud.",
                                    "RBI IFSC directory + GSTIN", link))
+                diverted.append(f"the account is in {found['state'].title()}, not {gst['state']}")
 
     # Where the money goes: a scam report that cites the UPI ID, number or account matters whoever it names
     money = [j for j in judged if j["source"] in ("payee", "phone", "account") and j["kind"] in ("fraud_or_enforcement", "customer_complaint")
@@ -162,6 +165,11 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
         if name_match(payee, names) < 0.6:
             flags.append(_flag("medium", f"You are asked to pay “{payee}”, which does not match the supplier's name ({vendor['name']}). Payments diverted to someone else's account are a common fraud: pay only into an account in the supplier's legal name, or get the change confirmed on a number you already know.",
                                "Payee check"))
+            diverted.append(f"the account holder is “{payee}”, not the supplier")
+    # Each alone can have an innocent reason; two together is the pattern of a diverted payment
+    if len(diverted) >= 2:
+        flags.append(_flag("high", f"{len(diverted)} separate signs this payment would not reach the supplier: {'; '.join(diverted)}. Hold it until the supplier confirms the bank details on a number you already know.",
+                           "Payment checks"))
     judged = [j for j in judged if j not in money]
 
     about = [j for j in judged if j["about_vendor"] == "yes" and j["severity"] != "none" and j["kind"] not in ("registry_record", "company_record")]
