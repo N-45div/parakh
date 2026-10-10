@@ -3,6 +3,7 @@ import html
 import re
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
+from .bank import account_digits
 from .search import Searches
 
 SUFFIXES = re.compile(r"(?:^|(?<=\s))(m/s\.?|ms\.|private|pvt\.?|limited|ltd\.?|llp)(?=\s|,|$)", re.I)
@@ -90,6 +91,10 @@ def gather(vendor: dict, searches: Searches):
     if upi:
         # Scam reports often name the UPI ID money was sent to
         plan["payee"] = ("UPI ID reports", "google", {"q": f'"{upi}"', "num": 10, **region})
+    account = account_digits(vendor.get("account"))
+    if account:
+        # ...and the bank account number, in complaint forums and cybercrime posts
+        plan["account"] = ("Bank account reports", "google", {"q": f'"{account}"', "num": 10, **region})
     results, listing = {}, None
     with ThreadPoolExecutor(max_workers=6) as pool:
         running = {pool.submit(searches.run, purpose, engine, **params): step for step, (purpose, engine, params) in plan.items()}
@@ -119,7 +124,7 @@ def gather(vendor: dict, searches: Searches):
               for i, n in enumerate((results["news"].get("news_results") or [])[:8]) if n.get("link")]
     items += _organic("court", results["court"]) + _organic("complaints", results["complaints"])
     items += _organic("company", results.get("company", {})) + _organic("phone", results.get("phone", {}))
-    items += _organic("payee", results.get("payee", {}))
+    items += _organic("payee", results.get("payee", {})) + _organic("account", results.get("account", {}))
     # Two searches can find the same page; it is one piece of evidence
     unique = list({i["link"] or i["id"]: i for i in items if i["title"] or i["snippet"]}.values())
     yield {"step": "gathered", "core_name": core, "listing": listing, "items": unique}
@@ -134,6 +139,7 @@ DETAILS = {
     "company": lambda listing: "Searched company registry listings for MCA status",
     "phone": lambda listing: "Searched reports about the phone number",
     "payee": lambda listing: "Searched reports about the UPI ID",
+    "account": lambda listing: "Searched reports about the bank account number",
 }
 UPI = re.compile(r"^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$")
 

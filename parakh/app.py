@@ -32,6 +32,9 @@ class Vendor(BaseModel):
     phone: str = Field(default="", max_length=20)
     payee: str = Field(default="", max_length=120)
     amount: int | None = Field(default=None, ge=0, le=10_000_000_000)
+    account: str = Field(default="", max_length=30)
+    ifsc: str = Field(default="", max_length=15)
+    bank: str = Field(default="", max_length=120)
 
 
 @app.get("/")

@@ -136,10 +136,10 @@ def test_an_amalgamated_company_needs_verifying():
     assert result["verdict"] == "verify" and "merged into another company" in result["flags"][0]["text"]
 
 
-def _build_money(judged, vendor_extra, website=None):
+def _build_money(judged, vendor_extra, website=None, bank=None):
     from datetime import date
     gst = gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd")
-    gathered = {"core_name": "Acme Steel", "website": website,
+    gathered = {"core_name": "Acme Steel", "website": website, "bank": bank,
                 "listing": {"title": "Acme Steel", "address": "Peenya, Bengaluru, Karnataka", "name_matches": True,
                             "permanently_closed": False, "temporarily_closed": False, "maps_link": None}, "items": judged}
     vendor = {"name": "Acme Steel Ltd", "city": "Bengaluru", "gstin": gst["gstin"], **vendor_extra}
@@ -185,6 +185,78 @@ def test_a_shared_name_prefix_is_not_the_same_business():
     assert other["name_matches"] is False
     same = _listing({"local_results": [{"title": "Sri Balaji Traders - Wholesale Dealers in Hardware Items"}]}, "Sri Balaji Traders")
     assert same["name_matches"] is True
+
+
+ASANSOL = {"bank": "State Bank of India", "branch": "ASANSOL", "city": "BARDHAMAN", "district": "ASANSOL", "state": "WEST BENGAL",
+           "address": "DNR MORE, ASANSOL, BURDWAN"}
+
+
+def test_the_ifsc_says_where_the_account_is():
+    from parakh import bank
+    assert bank.IFSC.match("SBIN0000011") and not bank.IFSC.match("SBIN1000011") and not bank.IFSC.match("SBI00000011")
+    assert bank.account_digits("3829 1047 6644 17") == "38291047664417" and bank.account_digits("12345") == "" and bank.account_digits("XXXX4417") == ""
+    assert bank.names_branch("State Bank of India, Peenya Branch", ASANSOL) is False
+    assert bank.names_branch("SBI Asansol", ASANSOL) is True
+    assert bank.names_branch("State Bank of India", ASANSOL) is None
+    assert bank.same_state("Karnataka", "KARNATAKA") and not bank.same_state("Karnataka", "WEST BENGAL")
+    checked = {"ifsc": "SBIN0000011", "valid_format": True, "branch": ASANSOL, "claimed": "State Bank of India, Peenya Branch"}
+    far = _build_money([], {"payee": "Acme Steel Ltd", "account": "38291047664417", "ifsc": "SBIN0000011"}, bank=checked)
+    texts = [f["text"] for f in far["flags"]]
+    assert far["verdict"] == "verify" and far["identity"]["bank"]["branch"]["branch"] == "ASANSOL"
+    assert any("Peenya Branch" in t and "Asansol branch" in t for t in texts)
+    assert any("West Bengal" in t and "Karnataka" in t for t in texts)
+    assert any("beneficiary name" in s["text"] for s in far["next_steps"])
+    local = {**ASANSOL, "branch": "PEENYA", "state": "KARNATAKA", "address": "PEENYA INDUSTRIAL AREA, BENGALURU"}
+    near = _build_money([], {"payee": "Acme Steel Ltd"}, bank={**checked, "branch": local, "claimed": "SBI Peenya"})
+    assert near["verdict"] == "clear"
+    unknown = _build_money([], {}, bank={**checked, "branch": {}})
+    assert any("No bank branch has the IFSC SBIN0000011" in f["text"] for f in unknown["flags"])
+    bad = _build_money([], {}, bank={"ifsc": "SBIN00XXXXX", "valid_format": False, "branch": None, "claimed": ""})
+    assert "not a valid IFSC" in bad["flags"][0]["text"]
+
+
+def test_ifsc_lookups_are_cached_including_a_missing_branch(monkeypatch):
+    from parakh import bank
+
+    class Memory(dict):
+        cached, remember = dict.get, dict.__setitem__
+
+    class NotFound:
+        status_code, is_success = 404, False
+
+    calls = []
+    monkeypatch.setattr(bank.httpx, "get", lambda url, **k: calls.append(url) or NotFound())
+    store = Memory()
+    assert bank.branch("ABCD0123456", store) == {} and bank.branch("ABCD0123456", store) == {}
+    assert calls == ["https://ifsc.razorpay.com/ABCD0123456"]
+
+    def offline(url, **k):
+        raise bank.httpx.ConnectError("offline")
+    monkeypatch.setattr(bank.httpx, "get", offline)
+    assert bank.branch("SBIN0000011", Memory()) is None
+
+
+def test_bank_details_read_from_a_quote_must_appear_in_it(monkeypatch):
+    import json
+    from parakh import document
+    text = "SHREE VINAYAKA CORRUGATORS, Peenya, Bengaluru. GSTIN 29ABKFS4821L1ZM. Account no: 3829 1047 6644 17. IFSC: SBIN0000011"
+
+    def answering(answer):
+        class Reply:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"choices": [{"message": {"content": json.dumps(answer)}}]}
+        return lambda *a, **k: Reply()
+
+    monkeypatch.setattr(document.httpx, "post", answering({"name": "Shree Vinayaka Corrugators", "account": "38291047664417", "ifsc": "SBIN0000011",
+                                                           "bank": "State Bank of India, Peenya Branch"}))
+    read = document.fields(text, "key")
+    assert (read["account"], read["ifsc"], read["bank"]) == ("38291047664417", "SBIN0000011", "State Bank of India, Peenya Branch")
+    monkeypatch.setattr(document.httpx, "post", answering({"name": "x", "account": "50100012345678", "ifsc": "HDFC0000001"}))
+    invented = document.fields(text, "key")
+    assert invented["account"] == "" and invented["ifsc"] == ""
 
 
 def test_a_repeat_check_reuses_the_models_labels(monkeypatch):

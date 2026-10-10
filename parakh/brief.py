@@ -4,6 +4,8 @@ import time
 import uuid
 from datetime import date
 
+from . import bank
+from .bank import account_digits
 from .evidence import upi_id
 
 NOISE = re.compile(r"\b(m/?s|messrs|pvt|private|ltd|limited|llp|the|and|co)\b|[^a-z0-9 ]")
@@ -11,7 +13,7 @@ NOISE = re.compile(r"\b(m/?s|messrs|pvt|private|ltd|limited|llp|the|and|co)\b|[^
 RANK = {"high": 0, "medium": 1, "low": 2, "none": 3}
 SOURCE_NAMES = {"registry": "GST registry listing", "reviews": "Google Maps review", "news": "News",
                 "court": "Court record", "complaints": "Complaint or forum post", "company": "Company registry listing",
-                "phone": "Report about the phone number", "payee": "Report about the UPI ID"}
+                "phone": "Report about the phone number", "payee": "Report about the UPI ID", "account": "Report about the bank account"}
 GROUPS = {
     "court_case": ("{n} court record{s} name this supplier in routine matters: cases it brought, consumer disputes or appeals.", "Court records"),
     "customer_complaint": ("{n} ordinary customer complaint{s} mention this supplier.", "Reviews and complaint sites"),
@@ -130,8 +132,27 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
         flags.append(_flag("medium", f"The supplier's website ({website['domain']}) was registered on {website['registered']}, under six months ago. New sites are common in supplier scams.",
                            "Domain registration (RDAP)", f"https://rdap.org/domain/{website['domain']}"))
 
-    # Where the money goes: a scam report that cites the UPI ID or number matters whoever it names
-    money = [j for j in judged if j["source"] in ("payee", "phone") and j["kind"] in ("fraud_or_enforcement", "customer_complaint")
+    # Which branch holds the account: one in another state, or not the branch the quote itself names, is how a diverted payment looks
+    checked = gathered.get("bank")
+    identity["bank"] = checked
+    if checked:
+        found, code = checked.get("branch"), checked["ifsc"]
+        if not checked["valid_format"]:
+            flags.append(_flag("medium", f"“{code}” is not a valid IFSC (four letters, a zero, then six letters or digits). Get the bank details again on a number you already know.", "IFSC check"))
+        elif found == {}:
+            flags.append(_flag("medium", f"No bank branch has the IFSC {code}. Made-up bank details on a quote are a warning sign; get them again on a number you already know.", "RBI IFSC directory"))
+        elif found:
+            where = f"{found['bank']}, {found['branch'].title()} branch ({found['state'].title()})"
+            link = f"https://ifsc.razorpay.com/{code}"
+            if checked.get("claimed") and bank.names_branch(checked["claimed"], found) is False:
+                flags.append(_flag("medium", f"The quote names “{checked['claimed']}”, but IFSC {code} belongs to {where}. Bank details that contradict themselves suggest the quote was altered; confirm them on a number you already know.",
+                                   "RBI IFSC directory", link))
+            if gst.get("valid") and gst.get("state") and found["state"] and not bank.same_state(gst["state"], found["state"]):
+                flags.append(_flag("medium", f"The account is at {where}, but the supplier's GST registration is in {gst['state']}. An account far from the supplier is common in diverted-payment fraud.",
+                                   "RBI IFSC directory + GSTIN", link))
+
+    # Where the money goes: a scam report that cites the UPI ID, number or account matters whoever it names
+    money = [j for j in judged if j["source"] in ("payee", "phone", "account") and j["kind"] in ("fraud_or_enforcement", "customer_complaint")
              and j["severity"] in ("high", "medium")]
     for j in money:
         flags.append(_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]))
@@ -171,6 +192,8 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     if gst.get("entity_type") in ("company", "firm or LLP") or identity.get("company"):
         steps.append({"text": "Look the company or LLP up on the MCA portal: is it active, and who are the directors?", "link": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"})
     steps.append({"text": "Ask for a cancelled cheque or bank letter in the same legal name as the invoice before you pay.", "link": None})
+    if account_digits(vendor.get("account")):
+        steps.append({"text": f"When you add the account in your bank app, check the beneficiary name it shows is {next(iter(identity['registry']['legal_names']), vendor['name'])}, before sending anything.", "link": None})
     if clashes:
         steps.append({"text": f"Rule out the {len(clashes)} result{'s' if len(clashes) > 1 else ''} below about a business with a similar name.", "link": None})
     upi, amount = upi_id(payee), vendor.get("amount") or 0
