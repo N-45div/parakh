@@ -26,9 +26,12 @@
       <label>GSTIN <span class="opt">from their quote or invoice</span><input name="gstin" maxlength="20" placeholder="15 characters, e.g. 29AAACT2727Q1ZS" autocomplete="off"></label>
       <label>Phone or WhatsApp number <span class="opt">optional</span><input name="phone" maxlength="20" placeholder="the number they messaged you from" autocomplete="off" inputmode="tel"></label>
       <label>Pay to <span class="opt">UPI ID or account holder name, optional</span><input name="payee" maxlength="120" placeholder="e.g. balajisteels@okaxis" autocomplete="off"></label>
+      <div class="row2"><label>Account number <span class="opt">optional</span><input name="account" maxlength="30" inputmode="numeric" placeholder="from their bank details" autocomplete="off"></label>
+        <label>IFSC <span class="opt">optional</span><input name="ifsc" maxlength="15" placeholder="e.g. SBIN0040125" autocomplete="off"></label></div>
+      <label>Bank and branch <span class="opt">as the quote writes them, optional</span><input name="bank" maxlength="120" placeholder="e.g. State Bank of India, Peenya Branch" autocomplete="off"></label>
       <label>Amount you're about to pay <span class="opt">₹, optional</span><input name="amount" inputmode="numeric" placeholder="e.g. 185000" autocomplete="off"></label>
       <button type="submit" id="go">Check this supplier</button>
-      <p class="fine">Six to eight searches per check, cached so a repeat check costs nothing.</p>
+      <p class="fine">Six to ten searches per check, cached so a repeat check costs nothing.</p>
     </form>
     <section class="panel recent" id="examples-panel" hidden>
       <h2>Example briefs</h2>

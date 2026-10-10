@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", payee: "UPI ID", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", website: "Website age", judge: "Open model" };
+const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", payee: "UPI ID", bank: "Bank branch", account: "Bank account", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", website: "Website age", judge: "Open model" };
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const STATUS = { strike_off: "struck off", under_liquidation: "under liquidation" };
 const ENGINE = { google: "Google Search", google_maps: "Google Maps", google_maps_reviews: "Google Maps Reviews", google_news: "Google News" };
@@ -63,13 +63,18 @@ function show(b) {
   const w = b.identity.website;
   const siteRows = w ? `<dt>Website</dt><dd>${link("https://" + w.domain, esc(w.domain))}<br><small>${w.registered ? "Domain registered " + esc(w.registered) : "Registration date not published"}</small></dd>` : "";
   const payRows = b.vendor.payee || b.vendor.amount ? `<dt>Pay to</dt><dd>${esc(b.vendor.payee || "Not given")}${b.vendor.amount ? `<br><small>${rupees(b.vendor.amount)} about to be paid</small>` : ""}</dd>` : "";
+  // The branch the IFSC belongs to, beside what the quote itself says
+  const k = b.identity.bank, br = k && k.branch, place = (s) => esc(String(s || "").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()));
+  const branchText = !k ? "" : !k.valid_format ? `<span class="pill elsewhere">Not a valid IFSC</span>` : br === null ? "IFSC directory could not be reached"
+    : !br.bank ? `<span class="pill missing">No branch has this IFSC</span>` : `${esc(br.bank)}, ${place(br.branch)} branch<br><small>${place(br.city)}, ${place(br.state)} · RBI IFSC directory</small>`;
+  const bankRows = k ? `<dt>Bank account</dt><dd>${b.vendor.account ? `<span class="mono">${esc(b.vendor.account)}</span> · ` : ""}<span class="mono">${esc(k.ifsc)}</span><br>${branchText}${k.claimed ? `<br><small>The quote says: ${esc(k.claimed)}</small>` : ""}</dd>` : "";
   const reads = Object.entries(b.read).map(([k, v]) => `${STEPS[k] || k}: ${v.read} read, ${v.about_vendor} about this supplier`).join(" · ");
   $("#brief").innerHTML = `
     <div class="verdict ${b.verdict}"><span class="label">${VERDICT[b.verdict]}</span><h2>${esc(b.headline)}</h2>
       <p>${esc(b.vendor.name)} · ${esc(b.vendor.city)}${b.vendor.gstin ? " · " + esc(b.vendor.gstin) : ""}${b.vendor.amount ? ` · <b>${rupees(b.vendor.amount)} at stake</b>` : ""}</p>
       <div class="actions"><button onclick="copyText()">Copy for WhatsApp</button><button onclick="copyLink()">Copy link</button><button onclick="window.print()">Save as PDF</button></div></div>
     <div class="grid">
-      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${companyRows}${mapRows}${siteRows}${payRows}</dl></section>
+      <section class="panel"><h3>Who they are</h3><dl>${gstRows}${regRows}${companyRows}${mapRows}${siteRows}${payRows}${bankRows}</dl></section>
       <section class="panel"><h3>Before you pay</h3><ol class="steps">${b.next_steps.map((s) => `<li>${esc(s.text)} ${link(s.link, "Open ↗")}</li>`).join("")}</ol></section>
     </div>
     <section class="panel"><h3>What the public record shows <small>${b.flags.length ? b.flags.length + " finding" + (b.flags.length > 1 ? "s" : "") : ""}</small></h3>
@@ -142,7 +147,7 @@ async function readPdf(file) {
     const response = await fetch("/api/extract", { method: "POST", body: form });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not read that PDF.");
-    for (const key of ["name", "city", "gstin", "phone", "payee"]) if (data[key]) $(`#form [name=${key}]`).value = data[key];
+    for (const key of ["name", "city", "gstin", "phone", "payee", "account", "ifsc", "bank"]) if (data[key]) $(`#form [name=${key}]`).value = data[key];
     if (data.amount) $("#form [name=amount]").value = data.amount;
     const extra = data.gstins_found.length > 1 && !data.gstin ? ` It lists ${data.gstins_found.length} GSTINs; pick the supplier's.` : "";
     $("#drop").querySelector("span").textContent = `Filled from ${file.name}. Check the fields, then run the check.${extra}`;
