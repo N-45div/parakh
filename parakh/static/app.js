@@ -39,7 +39,7 @@ const quote = (f) => f.quote ? `<blockquote>“${esc(f.quote)}”</blockquote>` 
 const link = (href, text) => href ? `<a href="${esc(href)}" target="_blank" rel="noreferrer">${text}</a>` : "";
 
 // What the skeptic agent concluded when it argued against this finding
-const CHALLENGE = { upheld: "Challenged and kept", moved: "Moved here by the skeptic", softened: "Softened by the skeptic" };
+const CHALLENGE = { upheld: "Challenged and kept", moved: "Moved here by the skeptic", softened: "Softened by the skeptic", ruled_out: "Why the skeptic ruled it out" };
 const challenge = (c) => c ? `<p class="challenge"><b>${CHALLENGE[c.outcome]}:</b> ${esc(c.reason)}${c.evidence ? ` <q>${esc(c.evidence)}</q>` : ""}</p>` : "";
 
 function flag(f) {

@@ -53,8 +53,10 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
         try:
             judged = skeptic.challenge(v, gst, gathering, judged, os.environ.get("TINKER_API_KEY"), store)
             outcomes = [j["challenge"]["outcome"] for j in judged if j.get("challenge")]
-            yield {"step": "skeptic", "detail": f"Kept {outcomes.count('upheld')}, moved {outcomes.count('moved')} to possibly a different business, "
-                                                f"softened {outcomes.count('softened')} where the supplier is only a victim or bystander"}
+            done = [f"kept {outcomes.count('upheld')}"] + [words.format(n=outcomes.count(key)) for key, words in (
+                ("moved", "moved {n} to possible namesakes"), ("ruled_out", "ruled out {n} as a different business"),
+                ("softened", "softened {n} where the supplier is only a victim or bystander")) if outcomes.count(key)]
+            yield {"step": "skeptic", "detail": "; ".join(done).capitalize()}
         except Exception:  # unchallenged findings stand as the labelling model gave them
             yield {"step": "skeptic", "detail": "The skeptic could not be reached; findings stand as labelled"}
     result = brief.build(v, gst, gathering, judged, model, searches.log)

@@ -86,8 +86,11 @@ def challenge(vendor: dict, gst: dict, gathered: dict, judged: list[dict], api_k
             continue
         verdict = decide(j, answers[id(j)])
         if verdict["outcome"] == "moved":
-            # One step down: a finding becomes a possible namesake; a possible namesake is dropped as a different business
-            out.append({**j, "about_vendor": "unclear" if j["about_vendor"] == "yes" else "no", "challenge": verdict})
+            # One step down: a finding becomes a possible namesake; a possible namesake is ruled out as a different business
+            if j["about_vendor"] == "yes":
+                out.append({**j, "about_vendor": "unclear", "challenge": verdict})
+            else:
+                out.append({**j, "about_vendor": "no", "challenge": {**verdict, "outcome": "ruled_out"}})
         elif verdict["outcome"] == "softened":
             out.append({**j, "severity": "low", "challenge": verdict})
         else:

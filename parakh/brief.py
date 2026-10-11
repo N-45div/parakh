@@ -191,7 +191,7 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     # What the skeptic ruled out stays visible, with its reason, instead of silently disappearing
     dismissed = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],
                   "date": j["date"], "publisher": j["publisher"], "challenge": j["challenge"]}
-                 for j in judged if j["about_vendor"] == "no" and (j.get("challenge") or {}).get("outcome") == "moved"]
+                 for j in judged if (j.get("challenge") or {}).get("outcome") == "ruled_out"]
     flags.sort(key=lambda f: RANK[f["severity"]])
 
     severities = {f["severity"] for f in flags}
