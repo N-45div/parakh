@@ -188,6 +188,10 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     clashes = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],
                 "severity": j["severity"], "date": j["date"], "publisher": j["publisher"], "challenge": j.get("challenge")}
                for j in judged if j["about_vendor"] == "unclear" and j["severity"] in ("high", "medium") and j["kind"] not in ("registry_record", "company_record")]
+    # What the skeptic ruled out stays visible, with its reason, instead of silently disappearing
+    dismissed = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],
+                  "date": j["date"], "publisher": j["publisher"], "challenge": j["challenge"]}
+                 for j in judged if j["about_vendor"] == "no" and (j.get("challenge") or {}).get("outcome") == "moved"]
     flags.sort(key=lambda f: RANK[f["severity"]])
 
     severities = {f["severity"] for f in flags}
@@ -225,7 +229,7 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
 
     return {
         "id": uuid.uuid4().hex[:12], "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "vendor": vendor,
-        "verdict": verdict, "headline": VERDICTS[verdict], "flags": flags, "clashes": clashes, "next_steps": steps,
+        "verdict": verdict, "headline": VERDICTS[verdict], "flags": flags, "clashes": clashes, "dismissed": dismissed, "next_steps": steps,
         "identity": {**identity, "gstin": {k: v for k, v in gst.items() if k != "flags"}},
         "read": by_source, "model": model, "searches": searches,
         "limits": ["Whether the supplier actually files GST returns (the GST portal shows this)",

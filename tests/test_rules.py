@@ -331,3 +331,9 @@ def test_the_skeptic_only_acts_on_quoted_evidence_and_never_makes_things_worse(m
     result = _build_on(list(out.values()), gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd"), __import__("datetime").date(2026, 10, 11))
     assert any(c["challenge"] and c["challenge"]["outcome"] == "moved" for c in result["clashes"])
     assert any(f.get("challenge") and f["challenge"]["outcome"] == "upheld" for f in result["flags"])
+    # A possible namesake the skeptic proves is another business is listed as ruled out, not dropped silently
+    namesake = {**finance, "about_vendor": "unclear"}
+    ruled = skeptic.challenge({"name": "Acme Steel", "city": "Pune"}, {}, {}, [namesake], "key")
+    assert ruled[0]["about_vendor"] == "no"
+    shown = _build_on(ruled, gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd"), __import__("datetime").date(2026, 10, 11))
+    assert shown["dismissed"][0]["challenge"]["evidence"] == "Tata Motors Finance" and not shown["clashes"]

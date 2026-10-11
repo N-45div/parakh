@@ -83,6 +83,8 @@ function show(b) {
     </div>
     <section class="panel"><h3>What the public record shows <small>${b.flags.length ? b.flags.length + " finding" + (b.flags.length > 1 ? "s" : "") : ""}</small></h3>
       ${b.flags.length ? `<ul class="flags">${b.flags.map(flag).join("")}</ul>` : `<p class="fine">Nothing in the searched sources raises a concern about this supplier.</p>`}</section>
+    ${(b.dismissed || []).length ? `<section class="panel"><h3>Ruled out by the skeptic agent <small>a different business, so not counted</small></h3>
+      <ul class="flags">${b.dismissed.map((d) => flag({ ...d, severity: "ruled out" })).join("")}</ul></section>` : ""}
     ${b.clashes.length ? `<section class="panel"><h3>Possibly a different business with a similar name <small>rule these out</small></h3>
       <ul class="flags">${b.clashes.map(flag).join("")}</ul></section>` : ""}
     <section class="panel"><h3>What this check cannot tell you</h3><ul class="limits">${b.limits.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>
