@@ -50,11 +50,14 @@ Every call is cached on disk by its parameters, so repeating a check costs no cr
 GSTIN ──► offline check: format, official check digit, state, the PAN inside it and its taxpayer type
    │
    ▼
-6 SerpApi searches ──► about 30 public results
+6 to 10 SerpApi searches ──► about 30 public results
    │
    ▼
-Qwen3.6-27B (open weights, served by Tinker) labels each result:
+labeller agent: Qwen3.6-27B (open weights, served by Tinker) labels each result:
    about this supplier / a namesake / unclear, its kind, the supplier's role, severity, a verbatim quote
+   │
+   ▼
+skeptic agent: argues against every serious finding, with a quote, and can only move or soften it
    │
    ▼
 fixed rules ──► verdict, findings, namesakes, next steps, limits
@@ -67,6 +70,23 @@ fixed rules ──► verdict, findings, namesakes, next steps, limits
   - a cancelled registration;
   - a broken GSTIN;
   - a business that has closed.
+
+## Agents that check each other, and a loop that learns from mistakes
+
+The costliest mistake a supplier check can make is a false alarm: a fraud story or a criminal case about a different business with a similar name, shown as if it were this supplier. Two agents and a measuring loop work on that.
+
+- **The skeptic agent** gets every serious finding the labeller produced, with everything Parakh knows about the supplier (state from the GSTIN, address, legal names, CIN). It argues the case that the result is about a *different* business ("Tata Motors Finance" is not "Tata Motors"), or that the supplier is only a victim, a bystander or the side that brought the case. It must quote the words that show it. Fixed rules then act in one direction only: a finding can be moved to "possibly a different business" or softened, never made worse, and only when the quote really appears in the result. Each finding in the brief shows what the skeptic concluded.
+- **The improvement loop** ([scripts/improve.py](scripts/improve.py)) measures the labeller against reference labels for 116 real results (four suppliers, all served from the SerpApi cache, so it costs no searches). An optimizer agent reads the labeller's mistakes on half the results and writes short, general lessons. A lesson set is kept only if it does better on the *other* half, which it never saw, and no worse on the half it learned from. Kept lessons go into [parakh/lessons.txt](parakh/lessons.txt), which the labeller reads.
+
+| On 116 real results ([evaluations/labelling.json](evaluations/labelling.json)) | Wrong holds | Missed holds | False namesake warnings | Missed namesake warnings | "About this supplier" right | Cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| Labeller alone | 0 | 0 | 2 | 4 | 66% | 28 |
+| With the lessons it learned | 0 | 0 | 1 | 4 | 70% | 24 |
+| With lessons and the skeptic | 0 | 0 | **0** | 4 | **72%** | **21** |
+
+The skeptic removed both false warnings: a murder case that mentions a "Sri Balaji Traders shop" only as the place it happened, and a case the business itself brought. Of the three rounds of lessons, one was kept; the others were rejected, one because it introduced a wrong hold ([evaluations/improvement.json](evaluations/improvement.json)). The four missed warnings remain: news results whose titles never show the supplier's name. The skeptic cannot fix those by design, since it never escalates.
+
+Honest limits: the reference labels were written by Claude (Anthropic) from each result's own text and spot-checked; 116 results from four suppliers is a small set, so these numbers show direction, not precision.
 
 ## Run it
 
