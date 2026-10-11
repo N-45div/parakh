@@ -1,0 +1,219 @@
+{
+ "when": "2026-10-11",
+ "history": [
+  {
+   "round": 0,
+   "lessons": "",
+   "train": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [],
+    "missed_warnings": [
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_wrong": [
+     "s0-reviews-0",
+     "s1-reviews-0",
+     "s1-reviews-2",
+     "s1-reviews-4",
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4",
+     "s2-court-6",
+     "s2-complaints-0"
+    ],
+    "about_accuracy": 0.609,
+    "cost": 15
+   },
+   "test": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [
+     "s2-court-1",
+     "s2-court-5"
+    ],
+    "missed_warnings": [
+     "s2-news-3"
+    ],
+    "about_wrong": [
+     "s1-reviews-1",
+     "s1-reviews-3",
+     "s1-news-4",
+     "s2-news-1",
+     "s2-news-3",
+     "s2-news-5",
+     "s2-court-3"
+    ],
+    "about_accuracy": 0.708,
+    "cost": 13
+   },
+   "kept": true
+  },
+  {
+   "round": 1,
+   "lessons": "- Label a result as 'about_vendor: yes' only if the text explicitly names the supplier or clearly refers to its specific operations, rather than just sharing a similar name or location.\n- Assign 'about_vendor: unclear' when the result mentions the supplier's name but lacks sufficient context to confirm it refers to the specific entity under review, such as in generic legal citations or ambiguous news headlines.\n- Treat low-star reviews mentioning specific dealership names or office policies as 'about_vendor: yes' if they describe interactions with staff or facilities associated with the supplier's brand.\n- Classify news reports about fraud, ED probes, or CBI cases as 'severity: high' even if the link to the specific supplier is tenuous, provided the supplier's name appears in the title or snippet.\n- Mark court case snippets that merely list the supplier as a party without detailing adverse judgments or enforcement actions as 'severity: low' rather than 'none'.\n- Never downgrade the severity of fraud or enforcement keywords to 'none' simply because the connection to the supplier is unclear; retain 'severity: high' to flag potential risk.",
+   "train": {
+    "results": 58,
+    "false_raises": [
+     "s1-news-3"
+    ],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [],
+    "missed_warnings": [
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_wrong": [
+     "s0-reviews-0",
+     "s1-reviews-0",
+     "s1-reviews-2",
+     "s1-reviews-4",
+     "s2-reviews-1",
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_accuracy": 0.652,
+    "cost": 17
+   },
+   "test": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [
+     "s1-news-0"
+    ],
+    "missed_warnings": [
+     "s2-news-3"
+    ],
+    "about_wrong": [
+     "s1-reviews-1",
+     "s1-reviews-3",
+     "s1-news-0",
+     "s1-news-4",
+     "s2-reviews-0",
+     "s2-news-1",
+     "s2-news-3",
+     "s2-news-5"
+    ],
+    "about_accuracy": 0.667,
+    "cost": 12
+   },
+   "kept": false
+  },
+  {
+   "round": 2,
+   "lessons": "- Label a result as 'about_vendor: unclear' if it mentions the supplier's name or a specific subsidiary/dealer but lacks sufficient context to confirm it refers to the exact entity being checked.\n- Assign 'severity: high' to news reports involving fraud, enforcement actions, or legal probes even if the supplier is not explicitly named in the title, provided the context suggests a potential link.\n- Do not dismiss a result as 'about_vendor: no' solely because the text describes a specific branch, dealer, or subsidiary; instead, mark it 'unclear' if the connection to the main supplier is ambiguous.\n- Classify customer complaints about service quality or management issues as 'severity: low' regardless of the emotional intensity of the language used.\n- Mark court case fragments or legal documents mentioning the supplier as 'severity: low' unless the text explicitly details a conviction, arrest, or significant financial penalty against the supplier.\n- Prioritize 'unclear' over 'no' for any result containing the supplier's name where the relevance is not definitively disproven by the available text.",
+   "train": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [],
+    "missed_warnings": [
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_wrong": [
+     "s0-reviews-0",
+     "s1-reviews-0",
+     "s1-reviews-2",
+     "s1-reviews-4",
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_accuracy": 0.696,
+    "cost": 13
+   },
+   "test": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [
+     "s1-news-0"
+    ],
+    "missed_warnings": [
+     "s2-news-3"
+    ],
+    "about_wrong": [
+     "s1-reviews-1",
+     "s1-reviews-3",
+     "s1-news-0",
+     "s1-news-4",
+     "s2-news-1",
+     "s2-news-3",
+     "s2-news-5"
+    ],
+    "about_accuracy": 0.708,
+    "cost": 11
+   },
+   "kept": true
+  },
+  {
+   "round": 3,
+   "lessons": "- Classify a result as 'about_vendor: unclear' if it describes a specific dealership, branch, or subsidiary associated with the supplier, even if the main corporate entity is not explicitly named.\n- Mark a result as 'about_vendor: unclear' when it contains the supplier's name or a known affiliate but lacks sufficient context to definitively confirm or deny the connection.\n- Assign 'severity: high' to news reports involving fraud, enforcement actions, or legal probes if the supplier is mentioned or potentially linked, regardless of whether the title explicitly names them.\n- Do not dismiss a result as 'about_vendor: no' solely because the text focuses on a local dealer or branch; instead, mark it 'unclear' if the connection to the main supplier is ambiguous.\n- Prioritize 'unclear' over 'no' for any result containing the supplier's name or a specific subsidiary where the relevance is not definitively disproven by the available text.\n- Classify customer complaints about service quality or management issues as 'severity: low' regardless of the emotional intensity of the language used.",
+   "train": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [],
+    "missed_warnings": [
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_wrong": [
+     "s0-reviews-0",
+     "s1-reviews-0",
+     "s1-reviews-2",
+     "s1-reviews-4",
+     "s2-news-0",
+     "s2-news-2",
+     "s2-news-4"
+    ],
+    "about_accuracy": 0.696,
+    "cost": 13
+   },
+   "test": {
+    "results": 58,
+    "false_raises": [],
+    "missed_raises": [],
+    "status_errors": [],
+    "false_warnings": [
+     "s1-news-0",
+     "s2-court-1",
+     "s2-complaints-7"
+    ],
+    "missed_warnings": [
+     "s2-news-3"
+    ],
+    "about_wrong": [
+     "s1-reviews-1",
+     "s1-reviews-3",
+     "s1-news-0",
+     "s1-news-4",
+     "s2-news-1",
+     "s2-news-3",
+     "s2-news-5",
+     "s2-complaints-7"
+    ],
+    "about_accuracy": 0.667,
+    "cost": 16
+   },
+   "kept": false
+  }
+ ]
+}

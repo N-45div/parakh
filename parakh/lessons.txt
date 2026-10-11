@@ -1,0 +1,6 @@
+- Label a result as 'about_vendor: unclear' if it mentions the supplier's name or a specific subsidiary/dealer but lacks sufficient context to confirm it refers to the exact entity being checked.
+- Assign 'severity: high' to news reports involving fraud, enforcement actions, or legal probes even if the supplier is not explicitly named in the title, provided the context suggests a potential link.
+- Do not dismiss a result as 'about_vendor: no' solely because the text describes a specific branch, dealer, or subsidiary; instead, mark it 'unclear' if the connection to the main supplier is ambiguous.
+- Classify customer complaints about service quality or management issues as 'severity: low' regardless of the emotional intensity of the language used.
+- Mark court case fragments or legal documents mentioning the supplier as 'severity: low' unless the text explicitly details a conviction, arrest, or significant financial penalty against the supplier.
+- Prioritize 'unclear' over 'no' for any result containing the supplier's name where the relevance is not definitively disproven by the available text.

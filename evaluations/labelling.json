@@ -1,0 +1,101 @@
+{
+ "labeller": {
+  "results": 116,
+  "false_raises": [],
+  "missed_raises": [],
+  "status_errors": [],
+  "false_warnings": [
+   "s2-court-1",
+   "s2-court-5"
+  ],
+  "missed_warnings": [
+   "s2-news-0",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4"
+  ],
+  "about_wrong": [
+   "s0-reviews-0",
+   "s1-reviews-0",
+   "s1-reviews-1",
+   "s1-reviews-2",
+   "s1-reviews-3",
+   "s1-reviews-4",
+   "s1-news-4",
+   "s2-news-0",
+   "s2-news-1",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4",
+   "s2-news-5",
+   "s2-court-3",
+   "s2-court-6",
+   "s2-complaints-0"
+  ],
+  "about_accuracy": 0.66,
+  "cost": 28
+ },
+ "labeller_with_lessons": {
+  "results": 116,
+  "false_raises": [],
+  "missed_raises": [],
+  "status_errors": [],
+  "false_warnings": [
+   "s1-news-0"
+  ],
+  "missed_warnings": [
+   "s2-news-0",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4"
+  ],
+  "about_wrong": [
+   "s0-reviews-0",
+   "s1-reviews-0",
+   "s1-reviews-1",
+   "s1-reviews-2",
+   "s1-reviews-3",
+   "s1-reviews-4",
+   "s1-news-0",
+   "s1-news-4",
+   "s2-news-0",
+   "s2-news-1",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4",
+   "s2-news-5"
+  ],
+  "about_accuracy": 0.702,
+  "cost": 24
+ },
+ "with_skeptic": {
+  "results": 116,
+  "false_raises": [],
+  "missed_raises": [],
+  "status_errors": [],
+  "false_warnings": [],
+  "missed_warnings": [
+   "s2-news-0",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4"
+  ],
+  "about_wrong": [
+   "s0-reviews-0",
+   "s1-reviews-0",
+   "s1-reviews-1",
+   "s1-reviews-2",
+   "s1-reviews-3",
+   "s1-reviews-4",
+   "s1-news-4",
+   "s2-news-0",
+   "s2-news-1",
+   "s2-news-2",
+   "s2-news-3",
+   "s2-news-4",
+   "s2-news-5"
+  ],
+  "about_accuracy": 0.723,
+  "cost": 21
+ }
+}

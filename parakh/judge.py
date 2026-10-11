@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+from pathlib import Path
 
 import httpx
 from concurrent.futures import ThreadPoolExecutor
@@ -58,24 +59,34 @@ def fallback(item: dict, vendor: dict) -> dict:
             "registered_on": "", "cin": ""}
 
 
-def judge(vendor: dict, items: list[dict], api_key: str | None, store=None) -> tuple[list[dict], str]:
+LESSONS = Path(__file__).with_name("lessons.txt")
+
+
+def instructions(lessons: str | None = None) -> str:
+    """The labelling instructions, plus the lessons scripts/improve.py kept because they measurably helped."""
+    lessons = LESSONS.read_text(encoding="utf-8").strip() if lessons is None and LESSONS.exists() else (lessons or "").strip()
+    return f"{SYSTEM}\n\nLessons from earlier mistakes:\n{lessons}" if lessons else SYSTEM
+
+
+def judge(vendor: dict, items: list[dict], api_key: str | None, store=None, system: str | None = None) -> tuple[list[dict], str]:
     if not items:
         return [], "none"
     if not api_key:
         return [{**i, **fallback(i, vendor)} for i in items], "keywords (no model key)"
+    system = system or instructions()
     supplier = {k: vendor.get(k) for k in ("name", "city", "gstin", "phone", "payee") if vendor.get(k)}
     results = [{"id": i["id"], "source": i["source"], "publisher": i.get("publisher"), "date": i.get("date"),
                 "title": i["title"][:300], "text": i["snippet"][:600]} for i in items]
     def ask(batch):
         question = json.dumps({"supplier": supplier, "results": batch}, ensure_ascii=False)
         # The same results for the same supplier get the same labels, so a repeat check skips the model
-        key = "judge-" + hashlib.sha1(f"{MODEL}\n{SYSTEM}\n{question}".encode()).hexdigest()[:20]
+        key = "judge-" + hashlib.sha1(f"{MODEL}\n{system}\n{question}".encode()).hexdigest()[:20]
         hit = store.cached(key) if store is not None else None
         if hit:
             return hit["results"]
         response = httpx.post(f"{ENDPOINT}/chat/completions", timeout=90, headers={"Authorization": f"Bearer {api_key}"}, json={
             "model": MODEL, "temperature": 0, "max_tokens": 1800, "reasoning_effort": False,
-            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}]})
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": question}]})
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         answer = json.loads(re.search(r"\{.*\}", content, re.S).group(0)).get("results", [])

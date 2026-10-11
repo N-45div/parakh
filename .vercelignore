@@ -10,3 +10,4 @@ scripts
 .claude
 skills-lock.json
 .env.local
+evaluations
