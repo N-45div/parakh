@@ -34,8 +34,8 @@ copied = 0
 for path in sorted((ROOT / "cache").glob("*.json")):
     if store.cached(path.stem) is None:
         data = json.loads(path.read_text(encoding="utf-8"))
-        # Model labels and IFSC lookups are stored as they are; only search responses are slimmed
-        store.remember(path.stem, data if path.stem.startswith(("judge-", "ifsc-")) else slim(data))
+        # Model labels, skeptic answers and IFSC lookups are stored as they are; only search responses are slimmed
+        store.remember(path.stem, data if path.stem.startswith(("judge-", "ifsc-", "skeptic-")) else slim(data))
         copied += 1
 print(f"copied {copied} cached searches")
 for vendor, note in EXAMPLES:
