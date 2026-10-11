@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", payee: "UPI ID", bank: "Bank branch", account: "Bank account", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", website: "Website age", judge: "Open model" };
+const STEPS = { gstin: "GSTIN", registry: "GST registries", company: "Company registry", phone: "Phone number", payee: "UPI ID", bank: "Bank branch", account: "Bank account", listing: "Google Maps", reviews: "Reviews", news: "News", court: "Court records", complaints: "Complaints", website: "Website age", judge: "Open model", skeptic: "Skeptic agent" };
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const STATUS = { strike_off: "struck off", under_liquidation: "under liquidation" };
 const ENGINE = { google: "Google Search", google_maps: "Google Maps", google_maps_reviews: "Google Maps Reviews", google_news: "Google News" };
@@ -38,9 +38,13 @@ const source = (f) => [f.publisher, f.date].filter(Boolean).map(esc).join(" · "
 const quote = (f) => f.quote ? `<blockquote>“${esc(f.quote)}”</blockquote>` : "";
 const link = (href, text) => href ? `<a href="${esc(href)}" target="_blank" rel="noreferrer">${text}</a>` : "";
 
+// What the skeptic agent concluded when it argued against this finding
+const CHALLENGE = { upheld: "Challenged and kept", moved: "Moved here by the skeptic", softened: "Softened by the skeptic" };
+const challenge = (c) => c ? `<p class="challenge"><b>${CHALLENGE[c.outcome]}:</b> ${esc(c.reason)}${c.evidence ? ` <q>${esc(c.evidence)}</q>` : ""}</p>` : "";
+
 function flag(f) {
   const items = f.items ? `<details><summary>Show ${f.items.length}</summary><ul>${f.items.map((i) => `<li>${esc(i.text)} ${link(i.link, "Source")}</li>`).join("")}</ul></details>` : "";
-  return `<li class="flag ${f.severity}"><span class="sev">${f.severity}</span><div><p>${esc(f.text)}</p>${quote(f)}
+  return `<li class="flag ${f.severity}"><span class="sev">${f.severity}</span><div><p>${esc(f.text)}</p>${quote(f)}${challenge(f.challenge)}
     <div class="meta">${esc(f.source)}${source(f) ? " · " + source(f) : ""} ${link(f.link, "Open source ↗")}</div>${items}</div></li>`;
 }
 
