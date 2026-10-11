@@ -175,7 +175,8 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
     about = [j for j in judged if j["about_vendor"] == "yes" and j["severity"] != "none" and j["kind"] not in ("registry_record", "company_record")]
     for j in about:
         if j["severity"] != "low":
-            flags.append(_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]))
+            flags.append({**_flag(j["severity"], j["finding"] or j["title"], SOURCE_NAMES.get(j["source"], j["source"]), j["link"], j["quote"], j["date"], j["publisher"]),
+                          "challenge": j.get("challenge")})
     # Routine mentions are summarised per source instead of listed one by one
     for kind in dict.fromkeys(j["kind"] for j in about if j["severity"] == "low"):
         group = [j for j in about if j["severity"] == "low" and j["kind"] == kind]
@@ -185,7 +186,7 @@ def build(vendor: dict, gst: dict, gathered: dict, judged: list[dict], model: st
         flag["items"] = [{"text": j["finding"] or j["title"], "link": j["link"], "quote": j["quote"]} for j in group]
         flags.append(flag)
     clashes = [{"text": j["finding"] or j["title"], "source": SOURCE_NAMES.get(j["source"], j["source"]), "link": j["link"], "quote": j["quote"],
-                "severity": j["severity"], "date": j["date"], "publisher": j["publisher"]}
+                "severity": j["severity"], "date": j["date"], "publisher": j["publisher"], "challenge": j.get("challenge")}
                for j in judged if j["about_vendor"] == "unclear" and j["severity"] in ("high", "medium") and j["kind"] not in ("registry_record", "company_record")]
     flags.sort(key=lambda f: RANK[f["severity"]])
 

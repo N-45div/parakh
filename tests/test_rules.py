@@ -287,3 +287,47 @@ def test_a_repeat_check_reuses_the_models_labels(monkeypatch):
     assert len(calls) == 1 and first == again and first[0]["about_vendor"] == "yes"
     judge.judge({"name": "Acme Steels", "city": "Pune"}, [item], "key", store)
     assert len(calls) == 2  # a different supplier is a different question
+
+
+def test_the_skeptic_only_acts_on_quoted_evidence_and_never_makes_things_worse(monkeypatch):
+    import json
+    from parakh import skeptic
+    finance = _judged(id="news-0", source="news", title="Tata Motors Finance and Eight Officials Booked in Alleged Fraud", snippet="",
+                      kind="fraud_or_enforcement", severity="high", about_vendor="yes")
+    arrest = _judged(id="news-1", source="news", title="Acme Steel MD arrested over fake invoices", snippet="", kind="fraud_or_enforcement",
+                     severity="high", about_vendor="yes")
+    victim = _judged(id="news-2", source="news", title="Acme Steel warns job seekers against recruitment fraud", snippet="",
+                     kind="fraud_or_enforcement", severity="medium", about_vendor="yes")
+    money = _judged(id="payee-0", source="payee", title="acme@okaxis cheated me", snippet="", kind="customer_complaint", severity="high", about_vendor="no")
+    routine = _judged(id="court-0", source="court", title="Acme Steel vs State", snippet="", kind="court_case", severity="low", about_vendor="yes")
+    assert skeptic.candidates([finance, arrest, victim, money, routine]) == [finance, arrest, victim]
+    answers = {
+        finance["title"]: {"same_business": "no", "role": "cannot_tell", "reason": "This is Tata Motors Finance, a different company.", "evidence": "Tata Motors Finance"},
+        arrest["title"]: {"same_business": "no", "role": "accused", "reason": "Different firm.", "evidence": "a phrase that is not in the result"},
+        victim["title"]: {"same_business": "yes", "role": "victim_or_bystander", "reason": "The company is warning about fraud.", "evidence": "warns job seekers"},
+    }
+
+    class Reply:
+        def __init__(self, body):
+            self.body = body
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": json.dumps(self.body)}}]}
+
+    def post(url, json=None, **kwargs):
+        asked = json["messages"][1]["content"]
+        return Reply(next(a for title, a in answers.items() if title in asked))
+    monkeypatch.setattr(skeptic.httpx, "post", post)
+    out = {j["id"]: j for j in skeptic.challenge({"name": "Acme Steel", "city": "Pune"}, {}, {}, [finance, arrest, victim, money, routine], "key")}
+    assert out["news-0"]["about_vendor"] == "unclear" and out["news-0"]["challenge"]["outcome"] == "moved"
+    # An unverifiable quote changes nothing: the arrest report stands
+    assert out["news-1"]["about_vendor"] == "yes" and out["news-1"]["severity"] == "high" and out["news-1"]["challenge"]["outcome"] == "upheld"
+    assert out["news-2"]["severity"] == "low" and out["news-2"]["challenge"]["outcome"] == "softened"
+    assert "challenge" not in out["payee-0"] and "challenge" not in out["court-0"]
+    # A moved finding becomes a possible namesake, which asks for verification but no longer holds the payment
+    result = _build_on(list(out.values()), gstin.inspect("29AAACT2727Q1ZS", "Acme Steel Ltd"), __import__("datetime").date(2026, 10, 11))
+    assert any(c["challenge"] and c["challenge"]["outcome"] == "moved" for c in result["clashes"])
+    assert any(f.get("challenge") and f["challenge"]["outcome"] == "upheld" for f in result["flags"])

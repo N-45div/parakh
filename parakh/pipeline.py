@@ -2,7 +2,7 @@
 import os
 from collections.abc import Iterator
 
-from . import bank, brief, domain, evidence, gstin, judge
+from . import bank, brief, domain, evidence, gstin, judge, skeptic
 from .search import Searches
 from .store import Store
 
@@ -46,6 +46,17 @@ def run(vendor: dict, store: Store) -> Iterator[dict]:
         judged, model = judge.judge(v, gathering["items"], os.environ.get("TINKER_API_KEY"), store)
     except Exception as error:  # the brief still works on keyword labels
         judged, model = [{**i, **judge.fallback(i, v)} for i in gathering["items"]], f"keywords (model unavailable: {type(error).__name__})"
+    # A second agent argues against every finding that would raise the verdict before the rules see it
+    targets = skeptic.candidates(judged)
+    if targets and not model.startswith("keywords"):
+        yield {"step": "skeptic", "detail": f"Challenging {len(targets)} finding{'s' if len(targets) != 1 else ''} that would raise the verdict"}
+        try:
+            judged = skeptic.challenge(v, gst, gathering, judged, os.environ.get("TINKER_API_KEY"), store)
+            outcomes = [j["challenge"]["outcome"] for j in judged if j.get("challenge")]
+            yield {"step": "skeptic", "detail": f"Kept {outcomes.count('upheld')}, moved {outcomes.count('moved')} to possibly a different business, "
+                                                f"softened {outcomes.count('softened')} where the supplier is only a victim or bystander"}
+        except Exception:  # unchallenged findings stand as the labelling model gave them
+            yield {"step": "skeptic", "detail": "The skeptic could not be reached; findings stand as labelled"}
     result = brief.build(v, gst, gathering, judged, model, searches.log)
     store.save(result)
     yield {"step": "done", "brief": result}
